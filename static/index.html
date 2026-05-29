@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Điểm Danh Sinh Trắc Học Edge-AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">ĐIỂM DANH SINH TRẮC HỌC EDGE-AI</p>
+        <h1>Xác thực khuôn mặt điểm danh với vùng nền lớp học hiển thị nhiều hơn.</h1>
+        <p class="hero-copy">
+          Khung mặt đã được thu nhỏ để giữ lại nhiều bối cảnh lớp học hơn.
+          Ở chế độ Đăng ký, bạn bấm nút lưu sau khi khung chuyển xanh.
+          Ở chế độ Xác minh, hệ thống tự động gửi ảnh sau khi khung chuyển xanh.
+        </p>
+      </header>
+
+      <main class="workspace">
+        <section class="camera-panel panel">
+          <div id="viewport" class="viewport">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas"></canvas>
+            <canvas id="freezeCanvas" class="freeze hidden"></canvas>
+            <div id="ovalGuide" class="oval-guide" aria-hidden="true"></div>
+
+            <div class="telemetry">
+              <span id="telemetryEar">EAR: --</span>
+              <span id="telemetryStatus">Trạng thái: Chờ</span>
+              <span id="telemetryHint">Gợi ý: Bật camera để hệ thống theo dõi khuôn mặt.</span>
+            </div>
+            <div id="liveGuideBadge" class="live-guide-badge">Gợi ý trực tiếp sẽ hiển thị tại đây.</div>
+          </div>
+        </section>
+
+        <section class="control-panel panel">
+          <div class="mode-switch" role="radiogroup" aria-label="Attendance mode">
+            <label class="mode-pill">
+              <input type="radio" name="mode" value="register" checked />
+              <span>Đăng ký</span>
+            </label>
+            <label class="mode-pill">
+              <input type="radio" name="mode" value="verify" />
+              <span>Xác minh</span>
+            </label>
+          </div>
+
+          <div id="systemNotice" class="system-notice info" aria-live="polite">
+            Hệ thống đang chờ bạn bật camera.
+          </div>
+
+          <div class="field-group">
+            <label for="studentId">Mã sinh viên</label>
+            <input id="studentId" type="text" placeholder="2026_SV01" autocomplete="off" />
+            <small>Dùng cho chức năng đăng ký.</small>
+          </div>
+
+          <div id="expectedGroup" class="field-group verify-only">
+            <label for="expectedId">ID kỳ vọng để đánh giá</label>
+            <input id="expectedId" type="text" placeholder="Chỉ nhập khi bạn đang test TP / FP" />
+            <small>
+              Nếu xác minh trả về đúng ID này thì tính là True Positive. Nếu xác minh pass nhưng sai ID thì tính là False Positive.
+            </small>
+          </div>
+
+          <div id="thresholdGroup" class="field-group verify-only">
+            <div class="threshold-row">
+              <label for="thresholdSlider">Ngưỡng cosine</label>
+              <output id="thresholdValue" for="thresholdSlider">0.80</output>
+            </div>
+            <input id="thresholdSlider" type="range" min="0.50" max="0.95" value="0.80" step="0.01" />
+            <small>Chỉ áp dụng cho xác minh.</small>
+          </div>
+
+          <div class="button-row">
+            <button id="startCameraBtn" type="button" class="primary-btn">Bật camera</button>
+            <button id="registerFaceBtn" type="button" class="secondary-btn">Đăng ký khuôn mặt</button>
+            <button id="quickViewDbBtn" type="button" class="ghost-btn">Xem nhanh CSDL khuôn mặt</button>
+            <button id="resetBtn" type="button" class="ghost-btn">Đặt lại</button>
+          </div>
+
+          <div class="stage-card">
+            <h2 id="workflowTitle">Hướng dẫn Đăng ký</h2>
+            <p id="workflowCopy" class="workflow-copy">
+              Nhập mã sinh viên, căn mặt vào khung, giữ ổn định 2 giây, chớp mắt. Khi khung chuyển xanh, bấm Đăng ký khuôn mặt.
+            </p>
+            <ol class="stage-list">
+              <li>Căn mặt vào khung vàng ở nửa dưới camera.</li>
+              <li>Giữ hướng nhìn thẳng và kích thước mặt ổn định trong 2 giây.</li>
+              <li>Chớp mắt một lần. Khi hợp lệ, khung chuyển xanh.</li>
+              <li>Đăng ký: bấm nút lưu. Xác minh: hệ thống tự động gửi lên backend.</li>
+            </ol>
+          </div>
+
+          <div class="stage-card criteria-card">
+            <h2>Tiêu chí đang kiểm tra</h2>
+            <ul id="criteriaList" class="criteria-list">
+              <li id="criteriaFace"><span class="dot"></span><span>Đã phát hiện khuôn mặt</span><strong>Chưa đạt</strong></li>
+              <li id="criteriaCenter"><span class="dot"></span><span>Căn giữa đúng trong khung</span><strong>Chưa đạt</strong></li>
+              <li id="criteriaPose"><span class="dot"></span><span>Giữ thẳng đầu (yaw/pitch/roll)</span><strong>Chưa đạt</strong></li>
+              <li id="criteriaSize"><span class="dot"></span><span>Kích thước mặt phù hợp</span><strong>Chưa đạt</strong></li>
+              <li id="criteriaHold"><span class="dot"></span><span>Giữ ổn định đủ 2 giây</span><strong>Chưa đạt</strong></li>
+              <li id="criteriaBlink"><span class="dot"></span><span>Chớp mắt hợp lệ</span><strong>Chưa đạt</strong></li>
+            </ul>
+          </div>
+
+          <div class="stage-card pose-debug-card">
+            <h2>Debug pose trực tiếp</h2>
+            <p class="workflow-copy">
+              Theo dõi riêng phần nghiêng đầu để đối chiếu với đường xanh trên camera. `Thô` là giá trị frame hiện tại, `ổn định` là giá trị sau khi làm mượt ngắn.
+            </p>
+            <div class="pose-debug-grid">
+              <div class="pose-debug-item">
+                <span>Roll thô</span>
+                <strong id="poseRollRaw">--</strong>
+              </div>
+              <div class="pose-debug-item">
+                <span>Roll ổn định</span>
+                <strong id="poseRollStable">--</strong>
+              </div>
+              <div class="pose-debug-item">
+                <span>Yaw thô</span>
+                <strong id="poseYawRaw">--</strong>
+              </div>
+              <div class="pose-debug-item">
+                <span>Yaw ổn định</span>
+                <strong id="poseYawStable">--</strong>
+              </div>
+              <div class="pose-debug-item">
+                <span>Pitch thô</span>
+                <strong id="posePitchRaw">--</strong>
+              </div>
+              <div class="pose-debug-item">
+                <span>Pitch ổn định</span>
+                <strong id="posePitchStable">--</strong>
+              </div>
+            </div>
+            <div class="pose-debug-footer">
+              <span>Trạng thái pose: <strong id="poseDecision">--</strong></span>
+              <span>Pose tốt liên tiếp: <strong id="poseFrames">0</strong></span>
+            </div>
+          </div>
+
+          <label class="toggle-row" for="evaluationToggle">
+            <input id="evaluationToggle" type="checkbox" checked />
+            <span>Hiển thị bảng đánh giá</span>
+          </label>
+        </section>
+      </main>
+
+      <section id="evaluationPanel" class="panel evaluation-panel">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Số lần xác minh</span>
+            <strong id="metricAttempts">0</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Lượt có gán nhãn</span>
+            <strong id="metricEvaluated">0</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">True Positives</span>
+            <strong id="metricTP">0</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">False Positives</span>
+            <strong id="metricFP">0</strong>
+          </div>
+        </div>
+
+        <div class="log-card">
+          <div class="log-header">
+            <h2>Nhật ký mô phỏng</h2>
+            <button id="clearLogBtn" type="button" class="ghost-btn small-btn">Xóa nhật ký</button>
+          </div>
+          <div id="logWindow" class="log-window" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,40 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and serialized data
+*.db
+*.sqlite
+*.sqlite3
+*.pkl
+*.pickle
+
+# Logs
+*.log
+logs/
+
+# Sensitive biometric/user data
+backend/data/
+uploads/
+media/
+
+# Frontend build/runtime artifacts
+frontend/node_modules/
+frontend/dist/
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+REPORT_VI.md
