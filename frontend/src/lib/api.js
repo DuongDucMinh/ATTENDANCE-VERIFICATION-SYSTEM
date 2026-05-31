@@ -12,6 +12,10 @@ export async function fetchProfile(studentId) {
   return parseResponse(await fetch(`${API_BASE}/api/profile/${encodeURIComponent(studentId)}`));
 }
 
+export async function fetchRuntimeConfig() {
+  return parseResponse(await fetch(`${API_BASE}/api/runtime-config`));
+}
+
 export async function upsertProfile(payload) {
   return parseResponse(
     await fetch(`${API_BASE}/api/profile/upsert`, {
@@ -22,9 +26,13 @@ export async function upsertProfile(payload) {
   );
 }
 
-export async function registerFace(studentId, file) {
+export async function registerFace(studentId, poseLabel, file, captureMeta) {
   const formData = new FormData();
   formData.append("student_id", studentId);
+  formData.append("pose_label", poseLabel);
+  if (captureMeta) {
+    formData.append("capture_meta", JSON.stringify(captureMeta));
+  }
   formData.append("file", file, "register.jpg");
   return parseResponse(
     await fetch(`${API_BASE}/api/face/register`, {
@@ -34,9 +42,12 @@ export async function registerFace(studentId, file) {
   );
 }
 
-export async function verifyAttendance(studentId, file) {
+export async function verifyAttendance(studentId, file, captureMeta) {
   const formData = new FormData();
   formData.append("student_id", studentId);
+  if (captureMeta) {
+    formData.append("capture_meta", JSON.stringify(captureMeta));
+  }
   formData.append("file", file, "verify.jpg");
   return parseResponse(
     await fetch(`${API_BASE}/api/attendance/verify`, {

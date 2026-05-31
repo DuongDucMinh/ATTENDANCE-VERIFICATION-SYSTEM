@@ -32,7 +32,16 @@ def import_face_db(source_path: Path) -> None:
 
         for student_id, vector in data.items():
             users.ensure_placeholder(str(student_id))
-            embeddings.upsert(str(student_id), [float(item) for item in vector], None)
+            embeddings.upsert(
+                str(student_id),
+                "front",
+                [float(item) for item in vector],
+                blur_score=None,
+                brightness_score=None,
+                quality_score=None,
+                capture_meta={"imported": True},
+                image_path=None,
+            )
 
         session.commit()
     finally:

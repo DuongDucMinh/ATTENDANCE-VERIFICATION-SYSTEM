@@ -1,159 +1,190 @@
-# Hệ Thống Web Điểm Danh Khuôn Mặt
+# Hệ Thống Điểm Danh Khuôn Mặt
 
-Ứng dụng web điểm danh sinh viên bằng khuôn mặt, gồm frontend React và backend FastAPI. Hệ thống tập trung vào luồng sử dụng thực tế: đăng ký khuôn mặt trong trang cá nhân, sau đó điểm danh theo `student_id` với kiểm tra liveness trước khi gửi ảnh lên server.
+Ứng dụng web điểm danh sinh viên bằng khuôn mặt, gồm frontend React và backend FastAPI. Phiên bản hiện tại tập trung vào:
 
-## 1. Tính năng chính
-- Giao diện web có sidebar:
-  - `Thông tin cá nhân`
-  - `Điểm danh`
-- Đăng ký khuôn mặt và điểm danh đều dùng webcam trực tiếp.
-- Kiểm tra điều kiện trên client trước khi gửi ảnh:
-  - căn giữa trong khung oval
-  - kiểm tra pose (roll/yaw/pitch)
-  - kiểm tra kích thước khuôn mặt trong khung
-  - giữ ổn định liên tục theo thời gian
-  - chớp mắt để xác thực sống
-- Sau khi đủ điều kiện, hệ thống tự crop khuôn mặt và gửi API.
-- Backend sinh embedding khuôn mặt bằng InsightFace (`buffalo_s`) và xác minh bằng cosine similarity.
-- Lưu dữ liệu trên PostgreSQL + pgvector:
-  - hồ sơ người dùng
-  - embedding khuôn mặt
-  - lịch sử đăng ký/điểm danh
+- Đăng ký 3 mẫu khuôn mặt `front / left / right`
+- Điểm danh bằng challenge ngẫu nhiên nhiều bước
+- Chọn frame tốt nhất ở frontend
+- Tính `hybrid similarity` ở backend bằng InsightFace
 
-## 2. Kiến trúc hệ thống
-```text
-Frontend (React + MediaPipe)
-  -> webcam + face landmarks
-  -> check alignment / pose / size / blink
-  -> auto-crop ảnh khuôn mặt
-  -> gọi API backend
+Báo cáo kỹ thuật chi tiết nằm tại [REPORT_VI.md](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/REPORT_VI.md).
 
-Backend (FastAPI + InsightFace)
-  -> decode ảnh
-  -> extract embedding 512 chiều
-  -> verify với embedding đã đăng ký của chính student_id
-  -> ghi log kết quả vào PostgreSQL
+## Kiến trúc hiện tại
+
+```mermaid
+flowchart LR
+    A["Camera trình duyệt"] --> B["MediaPipe Face Mesh"]
+    B --> C["Kiểm tra căn giữa / pose / chớp mắt / mở miệng"]
+    C --> D["Lấy burst frame sau khi đã ổn định"]
+    D --> E["Chấm quality và chọn frame tốt nhất"]
+    E --> F["Gửi 1 frame + capture_meta lên backend"]
+    F --> G["InsightFace sinh embedding"]
+    G --> H["Hybrid similarity: best sample + top-k + centroid"]
+    H --> I["Ghi attendance_logs và trả kết quả"]
 ```
 
-## 3. Công nghệ sử dụng
-- Frontend: React, Vite, JavaScript, MediaPipe Face Mesh
-- Backend: FastAPI, SQLAlchemy, InsightFace, OpenCV, NumPy
-- Database: PostgreSQL 16 + pgvector
-- Testing: `unittest` (backend), `vitest` (frontend)
+## Luồng nghiệp vụ
 
-## 4. Cấu trúc thư mục
-```text
-backend/
-  app/
-    api/
-    services/
-    models.py
-    repositories.py
-    db.py
-    main.py
-  scripts/
-    import_face_db.py
-frontend/
-  src/
-  tests/
-docker-compose.yml
-setup_local.ps1
-requirements.txt
+### Đăng ký khuôn mặt
+
+```mermaid
+flowchart TD
+    A["Bắt đầu đăng ký"] --> B["Front: mặt thẳng + chớp mắt 1 lần"]
+    B --> C["Lưu mẫu front"]
+    C --> D["Left: quay trái và giữ"]
+    D --> E["Lưu mẫu left"]
+    E --> F["Right: quay phải và giữ"]
+    F --> G["Lưu mẫu right"]
 ```
 
-## 5. Thiết lập môi trường
-1. Cài Docker Desktop, Python 3.10+, Node.js 18+.
-2. Tạo file môi trường:
-```powershell
-copy .env.example .env
+### Điểm danh
+
+```mermaid
+flowchart TD
+    A["Bắt đầu điểm danh"] --> B["Căn mặt ổn định trong khung"]
+    B --> C["Challenge ngẫu nhiên 2 bước"]
+    C --> D["Chọn frame tốt nhất"]
+    D --> E["Backend tính hybrid similarity"]
+    E --> F["Trả kết quả + decision breakdown"]
 ```
 
-`.env.example`:
+## Cấu hình threshold
+
+### Frontend
+
+Toàn bộ threshold phía frontend đã được gom vào một bảng cấu hình duy nhất:
+
+- [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
+
+Cấu trúc chính:
+
+- `THRESHOLDS.session`
+- `THRESHOLDS.blink`
+- `THRESHOLDS.alignment`
+- `THRESHOLDS.pose`
+- `THRESHOLDS.quality`
+- `THRESHOLDS.antiReplay`
+
+Ngoài ra, tham số lấy mẫu frame nằm trong:
+
+- `FRAME_CONFIG.sampleSize`
+- `FRAME_CONFIG.maxBufferedFrames`
+- `FRAME_CONFIG.sampleEveryNFrames`
+
+### Backend
+
+Ngưỡng quyết định similarity nằm trong:
+
+- [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example)
+- [config.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/config.py)
+
+Biến đang dùng:
+
 ```env
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/attendance_verification
-SIMILARITY_THRESHOLD=0.80
-VITE_API_BASE_URL=http://127.0.0.1:8000
+SIMILARITY_THRESHOLD=0.72
 ```
 
-## 6. Chạy nhanh (Windows)
-Script tự động:
+## Cách cập nhật threshold
+
+1. Nếu đổi threshold frontend, sửa [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js).
+2. Nếu đổi threshold backend, sửa [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env) hoặc [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example).
+3. Sau khi sửa:
+
 ```powershell
-.\setup_local.ps1
+cd frontend
+npm run build
 ```
 
-Script sẽ:
-- dựng PostgreSQL + pgvector bằng Docker
-- tạo `.venv` nếu chưa có, cài dependencies backend
-- cài dependencies frontend
-
-Nếu đã cài sẵn backend/frontend và chỉ cần DB:
 ```powershell
-.\setup_local.ps1 -SkipBackendInstall -SkipFrontendInstall
+.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
-## 7. Chạy thủ công
-### 7.1 Khởi động database
+4. Kiểm tra backend runtime thật sự:
+
+- [http://127.0.0.1:8000/api/runtime-config](http://127.0.0.1:8000/api/runtime-config)
+- [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
+
+## Hybrid similarity
+
+Backend hiện dùng công thức:
+
+```text
+centroid_score = cosine(probe, centroid)
+best_sample_score = max(sample_scores)
+top_k_score = mean(top 2 sample_scores)
+pose_weighted_score = 0.7 * top_k_score + 0.3 * centroid_score
+raw_match_score = max(best_sample_score, pose_weighted_score)
+quality_margin = bonus nhỏ theo chênh lệch blur / brightness
+final_score = min(0.99, raw_match_score + quality_margin)
+```
+
+Khi điểm danh, frontend cũng hiển thị:
+
+- `Threshold backend runtime`
+- `Điểm hybrid similarity`
+- `Raw match score`
+- `Quality margin`
+
+## API chính
+
+- `POST /api/profile/upsert`
+- `GET /api/profile/{student_id}`
+- `POST /api/face/register`
+- `POST /api/attendance/verify`
+- `GET /api/runtime-config`
+- `GET /api/health`
+
+## Trạng thái anti-replay
+
+Module anti-replay heuristic vẫn còn trong mã nguồn để nghiên cứu tiếp, nhưng hiện tại:
+
+- Không dùng để fail phiên
+- Không hiển thị trên giao diện debug
+- Không còn giao diện legacy riêng
+
+## Chạy local
+
+### Backend
+
+```powershell
+.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+### PostgreSQL
+
 ```powershell
 docker compose up -d
 ```
 
-### 7.2 Chạy backend
-```powershell
-.\.venv\Scripts\python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-### 7.3 Chạy frontend
-```powershell
-cd frontend
-npm run dev
-```
-
-Truy cập:
-- Frontend: `http://127.0.0.1:5173`
-- Swagger: `http://127.0.0.1:8000/docs`
-
-## 8. API chính
-- `POST /api/profile/upsert`: tạo/cập nhật hồ sơ theo `student_id`
-- `GET /api/profile/{student_id}`: lấy hồ sơ và trạng thái đăng ký khuôn mặt
-- `POST /api/face/register`: đăng ký/cập nhật embedding khuôn mặt
-- `POST /api/attendance/verify`: điểm danh, so khớp với embedding của chính `student_id`
-- `GET /api/health`: kiểm tra trạng thái dịch vụ
-
-## 9. Mô tả quy trình kiểm tra trên camera
-Trong mỗi phiên đăng ký/điểm danh:
-1. Mở camera và nhận landmarks từ MediaPipe.
-2. Kiểm tra khuôn mặt nằm gần tâm khung oval.
-3. Kiểm tra pose đầu (không nghiêng/quay quá mức).
-4. Kiểm tra kích thước mặt phù hợp với khung mục tiêu.
-5. Giữ đồng thời các điều kiện ổn định trong một khoảng thời gian.
-6. Theo dõi EAR để phát hiện chớp mắt (liveness).
-7. Khi đủ điều kiện, tự động crop ảnh khuôn mặt và gửi về backend.
-8. Backend trả kết quả thành công/thất bại, camera dừng phiên hiện tại.
-
-## 10. Dữ liệu lưu trữ
-- **Không lưu ảnh khuôn mặt gốc trong source code**.
-- Thông tin lưu trong PostgreSQL:
-  - bảng `users`: hồ sơ cá nhân
-  - bảng `face_embeddings`: vector khuôn mặt
-  - bảng `attendance_logs`: lịch sử đăng ký/điểm danh
-
-## 11. Kiểm thử
-Backend:
-```powershell
-python -m unittest discover -s tests -v
-```
+## Kiểm thử
 
 Frontend:
+
 ```powershell
 cd frontend
-npm run test
+npm test -- --run
+npm run build
 ```
 
-## 12. Bảo mật và lưu ý triển khai
-- `.gitignore` đã chặn:
-  - `.env`, log, DB local, dữ liệu ảnh sinh trắc học
-- Trước khi production:
-  - đổi mật khẩu DB
-  - bật HTTPS
-  - thêm rate limit và theo dõi audit log
-  - mã hóa backup và secrets
+Backend:
+
+```powershell
+python -m unittest discover -s tests
+```
+
+## Cấu trúc đáng chú ý
+
+- [CameraSession.jsx](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/components/CameraSession.jsx)
+- [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
+- [challengeEngine.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/challengeEngine.js)
+- [quality.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/quality.js)
+- [attendance.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/attendance.py)
+- [routes.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/api/routes.py)

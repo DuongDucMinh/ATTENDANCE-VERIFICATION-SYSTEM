@@ -91,5 +91,8 @@ class LazyInsightFaceEmbeddingService:
             self._service = InsightFaceEmbeddingService()
         return self._service
 
+    def warm_up(self) -> None:
+        self._ensure_service()
+
     def extract_embedding(self, image_bgr: np.ndarray) -> np.ndarray:
         return self._ensure_service().extract_embedding(image_bgr)

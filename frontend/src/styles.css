@@ -208,6 +208,13 @@ input {
   margin-top: 20px;
 }
 
+.camera-layout {
+  display: grid;
+  grid-template-columns: minmax(520px, 680px) minmax(560px, 720px);
+  gap: 22px;
+  align-items: start;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -215,18 +222,19 @@ button:disabled {
 }
 
 .register-workspace {
-  max-width: 880px;
+  max-width: 1460px;
 }
 
 .viewport {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  max-width: 560px;
+  max-width: 700px;
   overflow: hidden;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: #050913;
+  box-shadow: var(--shadow);
 }
 
 .viewport video,
@@ -286,6 +294,62 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.debug-panel {
+  display: grid;
+  gap: 7px;
+  max-height: none;
+  overflow: visible;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(6, 12, 22, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow);
+}
+
+.debug-panel > strong {
+  color: #fff0b4;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.05rem;
+}
+
+.debug-line {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.38;
+}
+
+.debug-line strong {
+  color: #f8f2cf;
+}
+
+.debug-line.pass {
+  color: #d7ffe9;
+  background: rgba(121, 239, 179, 0.1);
+  border-color: rgba(121, 239, 179, 0.32);
+}
+
+.debug-line.fail {
+  color: #ffe3e3;
+  background: rgba(255, 143, 143, 0.1);
+  border-color: rgba(255, 143, 143, 0.32);
+}
+
+.debug-line.warn {
+  color: #fff0be;
+  background: rgba(255, 212, 73, 0.1);
+  border-color: rgba(255, 212, 73, 0.32);
+}
+
+.debug-line.neutral {
+  color: var(--text);
+}
+
 .blocking-overlay {
   position: absolute;
   inset: 0;
@@ -336,6 +400,10 @@ button:disabled {
   }
 
   .page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-layout {
     grid-template-columns: 1fr;
   }
 

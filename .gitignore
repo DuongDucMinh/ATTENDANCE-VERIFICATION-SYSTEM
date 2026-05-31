@@ -30,11 +30,10 @@ media/
 # Frontend build/runtime artifacts
 frontend/node_modules/
 frontend/dist/
+frontend/.vite/
 
 # OS/editor artifacts
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-
-REPORT_VI.md

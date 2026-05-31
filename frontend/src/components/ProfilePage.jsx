@@ -7,6 +7,8 @@ const defaultProfile = {
   full_name: "",
   has_face_registered: false,
   last_face_registered_at: null,
+  registered_pose_labels: [],
+  registered_sample_count: 0,
 };
 
 export default function ProfilePage({ profile, setProfile, registrationResult, setRegistrationResult }) {
@@ -94,12 +96,13 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
                   <h3>{registrationResult.ok ? "Đăng ký thành công" : "Đăng ký thất bại"}</h3>
                   <p>Mã sinh viên: {registrationResult.studentId}</p>
                   <p>Thời gian: {new Date(registrationResult.createdAt).toLocaleString("vi-VN")}</p>
+                  {registrationResult.ok ? <p>Đã hoàn tất bộ mẫu `front`, `left`, `right`.</p> : null}
                   {registrationResult.reason ? <p>Lý do: {registrationResult.reason}</p> : null}
                 </article>
               ) : (
                 <article className="empty-state">
                   <h3>Sẵn sàng đăng ký</h3>
-                  <p>Đặt khuôn mặt vào khung, giữ đúng tư thế và chớp mắt một lần khi hệ thống yêu cầu.</p>
+                  <p>Phiên đăng ký sẽ thu lần lượt 3 pose: mặt thẳng, quay trái nhẹ và quay phải nhẹ.</p>
                 </article>
               )}
               <div className="button-strip">
@@ -157,8 +160,8 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
           <h2>Đăng ký khuôn mặt</h2>
           <p>
             {profile?.has_face_registered
-              ? `Đã đăng ký lần gần nhất vào ${new Date(profile.last_face_registered_at).toLocaleString("vi-VN")}.`
-              : "Chưa có khuôn mặt nào được đăng ký cho hồ sơ này."}
+              ? `Đã có ${profile.registered_sample_count} mẫu pose (${(profile.registered_pose_labels || []).join(", ")}) và lần gần nhất vào ${new Date(profile.last_face_registered_at).toLocaleString("vi-VN")}.`
+              : "Chưa có đủ 3 mẫu pose được đăng ký cho hồ sơ này."}
           </p>
         </div>
 
@@ -168,6 +171,7 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
               <h3>{registrationResult.ok ? "Đăng ký thành công" : "Đăng ký thất bại"}</h3>
               <p>Mã sinh viên: {registrationResult.studentId}</p>
               <p>Thời gian: {new Date(registrationResult.createdAt).toLocaleString("vi-VN")}</p>
+              {registrationResult.ok ? <p>Đã ghi nhận bộ mẫu `front`, `left`, `right` cho backend hybrid scoring.</p> : null}
               {registrationResult.reason ? <p>Lý do: {registrationResult.reason}</p> : null}
             </article>
           ) : (

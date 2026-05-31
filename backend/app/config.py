@@ -10,7 +10,8 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:5432/attendance_verification",
         alias="DATABASE_URL",
     )
-    similarity_threshold: float = Field(default=0.8, alias="SIMILARITY_THRESHOLD")
+    similarity_threshold: float = Field(default=0.72, alias="SIMILARITY_THRESHOLD")
+    uploads_dir: str = Field(default="backend/data/face_images", alias="UPLOADS_DIR")
     cors_origins: list[str] = Field(
         default=["http://127.0.0.1:5173", "http://localhost:5173"],
         alias="CORS_ORIGINS",

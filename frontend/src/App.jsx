@@ -14,6 +14,8 @@ export default function App() {
     full_name: "",
     has_face_registered: false,
     last_face_registered_at: null,
+    registered_pose_labels: [],
+    registered_sample_count: 0,
   });
   const [registrationResult, setRegistrationResult] = useState(null);
 

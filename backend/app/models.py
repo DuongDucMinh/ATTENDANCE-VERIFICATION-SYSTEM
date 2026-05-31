@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
@@ -52,15 +52,22 @@ class User(Base):
         nullable=False,
     )
 
-    face_embedding: Mapped["FaceEmbedding | None"] = relationship(back_populates="user", uselist=False)
+    face_embeddings: Mapped[list["FaceEmbedding"]] = relationship(back_populates="user")
     attendance_logs: Mapped[list["AttendanceLog"]] = relationship(back_populates="user")
 
 
 class FaceEmbedding(Base):
     __tablename__ = "face_embeddings"
+    __table_args__ = (UniqueConstraint("student_id", "pose_label", name="uq_face_embeddings_student_pose"),)
 
-    student_id: Mapped[str] = mapped_column(ForeignKey("users.student_id", ondelete="CASCADE"), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.student_id", ondelete="CASCADE"), nullable=False)
+    pose_label: Mapped[str] = mapped_column(String(32), nullable=False)
     embedding: Mapped[list[float]] = mapped_column(EmbeddingVector(), nullable=False)
+    blur_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    brightness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    capture_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     image_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -70,7 +77,7 @@ class FaceEmbedding(Base):
         nullable=False,
     )
 
-    user: Mapped[User] = relationship(back_populates="face_embedding")
+    user: Mapped[User] = relationship(back_populates="face_embeddings")
 
 
 class AttendanceLog(Base):
@@ -82,6 +89,7 @@ class AttendanceLog(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped[User] = relationship(back_populates="attendance_logs")

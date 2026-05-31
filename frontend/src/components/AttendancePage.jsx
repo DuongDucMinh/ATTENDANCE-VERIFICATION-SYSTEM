@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CameraSession from "./CameraSession";
+import { fetchRuntimeConfig } from "../lib/api";
 
 export default function AttendancePage({ defaultStudentId }) {
   const [studentId, setStudentId] = useState(defaultStudentId || "");
   const [activeSession, setActiveSession] = useState(false);
   const [result, setResult] = useState(null);
+  const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const decision = result?.meta?.decision_breakdown || null;
+
+  useEffect(() => {
+    fetchRuntimeConfig().then(setRuntimeConfig).catch(() => {
+      setRuntimeConfig(null);
+    });
+  }, []);
 
   return (
     <div className="page-grid single">
       <section className="panel">
         <div className="panel-heading">
           <h2>Điểm danh</h2>
-          <p>Đặt khuôn mặt vào khung, giữ đúng tư thế trong 2 giây, rồi chớp mắt một lần để xác minh.</p>
+          <p>Phiên điểm danh sẽ tạo challenge ngẫu nhiên 2 bước, chọn 1 frame tốt nhất rồi gửi lên backend để tính hybrid similarity.</p>
+          {typeof runtimeConfig?.similarity_threshold === "number" ? (
+            <p>Threshold backend runtime: {runtimeConfig.similarity_threshold.toFixed(3)}</p>
+          ) : null}
         </div>
 
         <label className="inline-field">
@@ -26,7 +38,10 @@ export default function AttendancePage({ defaultStudentId }) {
                 <h3>{result.ok ? "Điểm danh thành công" : "Điểm danh thất bại"}</h3>
                 <p>Mã sinh viên: {result.studentId}</p>
                 <p>Thời gian: {new Date(result.createdAt).toLocaleString("vi-VN")}</p>
-                {typeof result.score === "number" ? <p>Điểm similarity: {result.score.toFixed(3)}</p> : null}
+                {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
+                {typeof decision?.threshold === "number" ? <p>Threshold đang dùng: {decision.threshold.toFixed(3)}</p> : null}
+                {typeof decision?.raw_match_score === "number" ? <p>Raw match score: {decision.raw_match_score.toFixed(3)}</p> : null}
+                {typeof decision?.quality_margin === "number" ? <p>Quality margin: {decision.quality_margin.toFixed(3)}</p> : null}
                 {result.reason ? <p>Lý do: {result.reason}</p> : null}
               </article>
             ) : (
