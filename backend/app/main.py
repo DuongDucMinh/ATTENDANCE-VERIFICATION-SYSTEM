@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,11 +20,26 @@ def create_app(embedding_service=None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        diagnostics = settings.diagnostics
         LOGGER.info(
-            "Starting API with similarity_threshold=%.3f uploads_dir=%s",
+            "Starting API with similarity_threshold=%.3f source=%s uploads_dir=%s env_file=%s cwd=%s pid=%s",
             settings.similarity_threshold,
+            diagnostics["similarity_threshold_source"],
             settings.uploads_dir,
+            diagnostics["env_file_path"],
+            diagnostics["launch_cwd"],
+            os.getpid(),
         )
+        if (
+            diagnostics["similarity_threshold_process_env"] is not None
+            and diagnostics["similarity_threshold_env_file"] is not None
+            and diagnostics["similarity_threshold_process_env"] != diagnostics["similarity_threshold_env_file"]
+        ):
+            LOGGER.warning(
+                "SIMILARITY_THRESHOLD mismatch: process env=%s overrides .env=%s",
+                diagnostics["similarity_threshold_process_env"],
+                diagnostics["similarity_threshold_env_file"],
+            )
         ensure_pgvector_extension()
         Base.metadata.create_all(bind=engine)
         warm_up = getattr(service, "warm_up", None)
@@ -46,8 +62,9 @@ def create_app(embedding_service=None) -> FastAPI:
     app.include_router(build_router(service))
 
     @app.get("/api/health")
-    async def health() -> dict[str, str | float]:
-        return {"status": "ok", "similarity_threshold": settings.similarity_threshold}
+    async def health() -> dict[str, str | float | bool | None]:
+        diagnostics = settings.diagnostics
+        return {"status": "ok", **diagnostics}
 
     return app
 

@@ -71,3 +71,9 @@ class RuntimeConfigResponse(BaseModel):
     app_name: str
     similarity_threshold: float
     uploads_dir: str
+    similarity_threshold_source: str
+    similarity_threshold_process_env: str | None = None
+    similarity_threshold_env_file: str | None = None
+    env_file_path: str
+    env_file_exists: bool
+    launch_cwd: str

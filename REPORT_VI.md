@@ -15,22 +15,7 @@ Mục tiêu của đợt làm sạch này là:
 - Loại bỏ phần legacy không còn dùng
 - Đồng bộ tài liệu với đúng trạng thái runtime hiện tại
 
-## 2. Kiến trúc sau khi làm sạch
-
-```mermaid
-flowchart LR
-    A["Webcam"] --> B["MediaPipe Face Mesh"]
-    B --> C["Kiểm tra căn giữa, pose, chớp mắt, mở miệng"]
-    C --> D["Frame sampler"]
-    D --> E["Quality scoring"]
-    E --> F["Chọn frame tốt nhất"]
-    F --> G["POST /api/face/register hoặc /api/attendance/verify"]
-    G --> H["InsightFace embedding"]
-    H --> I["Hybrid similarity"]
-    I --> J["attendance_logs.meta + kết quả trả về"]
-```
-
-### Phân tách trách nhiệm
+## 2. Phân tách trách nhiệm
 
 Frontend:
 
@@ -85,6 +70,8 @@ FRAME_CONFIG = {
 - `poseHoldMs`: thời gian giữ tư thế ở các challenge quay trái / quay phải / mở miệng
 - `verifyStepTimeoutMs`: timeout cho từng bước điểm danh
 - `verifySessionTimeoutMs`: timeout toàn phiên điểm danh
+- `verifyNeutralCaptureHoldMs`: thời gian giữ mặt thẳng sau challenge để chụp ảnh recognition
+- `verifyNeutralCaptureTimeoutMs`: timeout cho pha neutral capture sau challenge
 - `registerSessionTimeoutMs`: timeout toàn phiên đăng ký
 
 `THRESHOLDS.blink`
@@ -155,10 +142,13 @@ Sau mỗi pose:
 flowchart TD
     A["Bắt đầu điểm danh"] --> B["Giữ ổn định trong khung"]
     B --> C["Random 2-step challenge"]
-    C --> D["Chấm quality theo burst frame"]
-    D --> E["Chọn frame tốt nhất cho nhận diện"]
-    E --> F["Backend tính hybrid similarity"]
-    F --> G["Trả decision breakdown"]
+    C --> D["Challenge pass"]
+    D --> E["Quay về mặt thẳng và giữ ổn định"]
+    E --> F["Lấy burst frame neutral"]
+    F --> G["Chấm quality theo burst frame neutral"]
+    G --> H["Chọn frame tốt nhất cho nhận diện"]
+    H --> I["Backend tính hybrid similarity"]
+    I --> J["Trả decision breakdown"]
 ```
 
 Challenge verify hiện dùng tập:
@@ -211,9 +201,12 @@ best_sample_score = max(sample_scores)
 top_k_score = mean(top 2 sample_scores)
 pose_weighted_score = 0.7 * top_k_score + 0.3 * centroid_score
 raw_match_score = max(best_sample_score, pose_weighted_score)
-quality_margin = bonus nhỏ theo chênh lệch blur / brightness
-final_score = min(0.99, raw_match_score + quality_margin)
+final_score = min(0.99, raw_match_score)
 ```
+
+`capture_meta.quality` vẫn được backend lưu trong log để phục vụ debug và phân tích, nhưng không còn tham gia cộng hoặc trừ vào `final_score`.
+
+Điểm quan trọng của luồng mới là frame gửi sang backend trong `verify` không còn lấy trực tiếp từ lúc người dùng đang blink, mở miệng hoặc quay đầu. Challenge chỉ dùng để xác nhận liveness; sau khi challenge pass, frontend buộc người dùng quay lại tư thế trung tính rồi mới chụp burst frame riêng cho recognition.
 
 Backend chỉ pass khi:
 
@@ -234,7 +227,21 @@ Frontend cũng hiển thị:
 - `Threshold backend runtime`
 - `Điểm hybrid similarity`
 - `Raw match score`
-- `Quality margin`
+
+## 7.1 Cấu hình môi trường khi chạy dev
+
+Dự án chỉ cần file `.env` ở root cho cấu hình backend runtime. Frontend không cần `frontend/.env` cho luồng dev local hoặc VS Code dev tunnel.
+
+Frontend gọi API bằng đường dẫn relative `/api/...`. Trong môi trường dev, [frontend/vite.config.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/vite.config.js) proxy toàn bộ `/api` sang backend local `http://127.0.0.1:8000`.
+
+Khi test trên điện thoại bằng VS Code forward port:
+
+- Chạy backend ở `127.0.0.1:8000`
+- Chạy frontend ở `5173`
+- Forward port `5173`
+- Mở URL tunnel của frontend trên điện thoại
+
+Không cần hard-code URL tunnel backend và không cần tạo `frontend/.env` riêng.
 
 ## 8. Làm sạch giao diện
 
@@ -324,17 +331,27 @@ hoặc nếu đang chạy dev server:
 npm run dev
 ```
 
+Frontend dev server tự proxy `/api` sang backend local, nên không cần sửa `VITE_API_BASE_URL` khi chạy local hoặc khi test qua VS Code dev tunnel.
+
 ### Backend
 
-Sửa tại:
+Sửa threshold runtime tại:
 
 - [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env)
-- [backend/app/config.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/config.py)
 
-Sau đó restart backend:
+File [backend/app/config.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/config.py) chỉ giữ giá trị mặc định khi không có `.env`.
+
+Sau khi sửa `.env`, backend phải được restart vì cấu hình được đọc khi process khởi động. Nếu port `8000` đang bị process cũ giữ, dừng process đó trước:
 
 ```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 .\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+Kiểm tra runtime thật sự:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
 ```
 
 ## 13. Kết luận

@@ -10,9 +10,19 @@ export default function AttendancePage({ defaultStudentId }) {
   const decision = result?.meta?.decision_breakdown || null;
 
   useEffect(() => {
-    fetchRuntimeConfig().then(setRuntimeConfig).catch(() => {
-      setRuntimeConfig(null);
-    });
+    let cancelled = false;
+
+    fetchRuntimeConfig()
+      .then((config) => {
+        if (!cancelled) setRuntimeConfig(config);
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeConfig(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -20,9 +30,12 @@ export default function AttendancePage({ defaultStudentId }) {
       <section className="panel">
         <div className="panel-heading">
           <h2>Điểm danh</h2>
-          <p>Phiên điểm danh sẽ tạo challenge ngẫu nhiên 2 bước, chọn 1 frame tốt nhất rồi gửi lên backend để tính hybrid similarity.</p>
+          <p>Phiên điểm danh sẽ tạo challenge ngẫu nhiên 2 bước. Sau khi challenge đạt, hệ thống sẽ chụp thêm 1 ảnh mặt thẳng ổn định rồi mới gửi lên backend để tính hybrid similarity.</p>
           {typeof runtimeConfig?.similarity_threshold === "number" ? (
-            <p>Threshold backend runtime: {runtimeConfig.similarity_threshold.toFixed(3)}</p>
+            <p>
+              Threshold backend runtime: {runtimeConfig.similarity_threshold.toFixed(3)}
+              {runtimeConfig?.similarity_threshold_source ? ` (${runtimeConfig.similarity_threshold_source})` : ""}
+            </p>
           ) : null}
         </div>
 
@@ -41,7 +54,6 @@ export default function AttendancePage({ defaultStudentId }) {
                 {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
                 {typeof decision?.threshold === "number" ? <p>Threshold đang dùng: {decision.threshold.toFixed(3)}</p> : null}
                 {typeof decision?.raw_match_score === "number" ? <p>Raw match score: {decision.raw_match_score.toFixed(3)}</p> : null}
-                {typeof decision?.quality_margin === "number" ? <p>Quality margin: {decision.quality_margin.toFixed(3)}</p> : null}
                 {result.reason ? <p>Lý do: {result.reason}</p> : null}
               </article>
             ) : (

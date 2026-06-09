@@ -9,20 +9,6 @@
 
 Báo cáo kỹ thuật chi tiết nằm tại [REPORT_VI.md](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/REPORT_VI.md).
 
-## Kiến trúc hiện tại
-
-```mermaid
-flowchart LR
-    A["Camera trình duyệt"] --> B["MediaPipe Face Mesh"]
-    B --> C["Kiểm tra căn giữa / pose / chớp mắt / mở miệng"]
-    C --> D["Lấy burst frame sau khi đã ổn định"]
-    D --> E["Chấm quality và chọn frame tốt nhất"]
-    E --> F["Gửi 1 frame + capture_meta lên backend"]
-    F --> G["InsightFace sinh embedding"]
-    G --> H["Hybrid similarity: best sample + top-k + centroid"]
-    H --> I["Ghi attendance_logs và trả kết quả"]
-```
-
 ## Luồng nghiệp vụ
 
 ### Đăng ký khuôn mặt
@@ -43,10 +29,23 @@ flowchart TD
 flowchart TD
     A["Bắt đầu điểm danh"] --> B["Căn mặt ổn định trong khung"]
     B --> C["Challenge ngẫu nhiên 2 bước"]
-    C --> D["Chọn frame tốt nhất"]
-    D --> E["Backend tính hybrid similarity"]
-    E --> F["Trả kết quả + decision breakdown"]
+    C --> D["Challenge đạt"]
+    D --> E["Quay về mặt thẳng và giữ ổn định ngắn"]
+    E --> F["Chọn frame neutral tốt nhất"]
+    F --> G["Backend tính hybrid similarity"]
+    G --> H["Trả kết quả + decision breakdown"]
 ```
+
+## Cấu hình môi trường
+
+Dự án chỉ cần một file cấu hình runtime ở root:
+
+- [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env)
+- [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example)
+
+Frontend dev server không cần `frontend/.env` cho luồng local hoặc VS Code dev tunnel. Mặc định frontend gọi relative `/api`, sau đó Vite proxy request sang backend local `http://127.0.0.1:8000`.
+
+Khi test trên điện thoại bằng VS Code forward port, chỉ cần forward port frontend `5173`. Backend vẫn chạy local ở `127.0.0.1:8000`; request `/api/...` đi qua tunnel frontend rồi được Vite proxy sang backend.
 
 ## Cấu hình threshold
 
@@ -81,25 +80,33 @@ Ngưỡng quyết định similarity nằm trong:
 Biến đang dùng:
 
 ```env
-SIMILARITY_THRESHOLD=0.72
+SIMILARITY_THRESHOLD=0.7
 ```
 
 ## Cách cập nhật threshold
 
 1. Nếu đổi threshold frontend, sửa [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js).
-2. Nếu đổi threshold backend, sửa [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env) hoặc [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example).
-3. Sau khi sửa:
+2. Nếu đổi threshold backend runtime, sửa [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env). File [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example) chỉ là mẫu.
+3. Sau khi sửa frontend:
 
 ```powershell
 cd frontend
 npm run build
 ```
 
+4. Sau khi sửa backend `.env`, phải tắt process backend cũ và chạy lại từ thư mục gốc project:
+
 ```powershell
-.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
-4. Kiểm tra backend runtime thật sự:
+5. Kiểm tra runtime thật sự:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+```
+6. Kiểm tra backend runtime thật sự:
 
 - [http://127.0.0.1:8000/api/runtime-config](http://127.0.0.1:8000/api/runtime-config)
 - [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
@@ -114,16 +121,18 @@ best_sample_score = max(sample_scores)
 top_k_score = mean(top 2 sample_scores)
 pose_weighted_score = 0.7 * top_k_score + 0.3 * centroid_score
 raw_match_score = max(best_sample_score, pose_weighted_score)
-quality_margin = bonus nhỏ theo chênh lệch blur / brightness
-final_score = min(0.99, raw_match_score + quality_margin)
+final_score = min(0.99, raw_match_score)
 ```
+
+`capture_meta.quality` vẫn được backend ghi vào log để debug, nhưng không còn dùng để cộng hoặc trừ vào `final_score`.
+
+Trong `verify`, frame gửi lên backend không lấy trực tiếp từ lúc đang thực hiện challenge. Challenge chỉ dùng để xác nhận liveness; sau khi challenge đạt, frontend sẽ lấy thêm một burst frame neutral riêng để phục vụ recognition.
 
 Khi điểm danh, frontend cũng hiển thị:
 
 - `Threshold backend runtime`
 - `Điểm hybrid similarity`
 - `Raw match score`
-- `Quality margin`
 
 ## API chính
 
@@ -144,6 +153,12 @@ Module anti-replay heuristic vẫn còn trong mã nguồn để nghiên cứu ti
 
 ## Chạy local
 
+### PostgreSQL
+
+```powershell
+docker compose up -d
+```
+
 ### Backend
 
 ```powershell
@@ -158,11 +173,7 @@ npm install
 npm run dev
 ```
 
-### PostgreSQL
-
-```powershell
-docker compose up -d
-```
+Khi mở trên điện thoại qua VS Code dev tunnel, forward port `5173` và mở URL tunnel của frontend. Không cần forward port `8000` nếu đang dùng Vite dev server.
 
 ## Kiểm thử
 

@@ -82,10 +82,17 @@ def build_router(embedding_service) -> APIRouter:
 
     @router.get("/runtime-config", response_model=RuntimeConfigResponse)
     async def get_runtime_config() -> RuntimeConfigResponse:
+        diagnostics = settings.diagnostics
         return RuntimeConfigResponse(
             app_name=settings.app_name,
             similarity_threshold=settings.similarity_threshold,
             uploads_dir=settings.uploads_dir,
+            similarity_threshold_source=settings.similarity_threshold_source,
+            similarity_threshold_process_env=settings.similarity_threshold_process_env,
+            similarity_threshold_env_file=settings.similarity_threshold_env_file,
+            env_file_path=diagnostics["env_file_path"],
+            env_file_exists=bool(diagnostics["env_file_exists"]),
+            launch_cwd=str(diagnostics["launch_cwd"]),
         )
 
     @router.post("/face/register", response_model=ActionResponse)

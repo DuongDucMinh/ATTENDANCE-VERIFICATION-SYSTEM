@@ -26,6 +26,8 @@ export const THRESHOLDS = {
     poseHoldMs: 400,
     verifyStepTimeoutMs: 8000,
     verifySessionTimeoutMs: 20000,
+    verifyNeutralCaptureHoldMs: 600,
+    verifyNeutralCaptureTimeoutMs: 6000,
     registerSessionTimeoutMs: 30000,
   },
   blink: {

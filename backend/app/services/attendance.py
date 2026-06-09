@@ -21,7 +21,6 @@ POSE_LABELS = {"front", "left", "right"}
 MIN_REGISTERED_SAMPLES = 3
 POSE_SCORE_WEIGHT = 0.7
 CENTROID_SCORE_WEIGHT = 0.3
-MAX_QUALITY_MARGIN = 0.06
 
 
 @dataclass
@@ -52,33 +51,6 @@ def normalize_vector(vector: np.ndarray) -> np.ndarray:
 
 def safe_filename_part(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "_", value).strip("_") or "unknown"
-
-
-def mean_present(values: list[float | None]) -> float | None:
-    present = [float(value) for value in values if value is not None]
-    if not present:
-        return None
-    return float(np.mean(present))
-
-
-def compute_quality_margin(
-    probe_quality: dict[str, Any],
-    registered_brightness: float | None,
-    registered_blur: float | None,
-) -> float:
-    probe_brightness = probe_quality.get("brightness_mean")
-    probe_blur = probe_quality.get("blur_score")
-    margin = 0.0
-
-    if probe_brightness is not None and registered_brightness is not None:
-        brightness_gap = abs(float(probe_brightness) - registered_brightness)
-        margin += min(0.04, (brightness_gap / 255.0) * 0.08)
-
-    if probe_blur is not None and registered_blur is not None and float(probe_blur) < registered_blur:
-        blur_gap_ratio = min(1.0, (registered_blur - float(probe_blur)) / max(registered_blur, 1.0))
-        margin += 0.02 * blur_gap_ratio
-
-    return round(min(MAX_QUALITY_MARGIN, margin), 3)
 
 
 class AttendanceService:
@@ -119,7 +91,13 @@ class AttendanceService:
         quality_summary = capture_meta_dict.get("quality") or {}
         anti_replay_summary = capture_meta_dict.get("anti_replay") or {}
         quality_score = quality_summary.get("quality_score")
-        image_path = self._save_registered_face_image(student_id, pose_label, file_bytes)
+        existing_sample = self.embeddings.get_pose(student_id, pose_label)
+        image_path = self._save_registered_face_image(
+            student_id,
+            pose_label,
+            file_bytes,
+            previous_image_path=existing_sample.image_path if existing_sample else None,
+        )
 
         face_record = self.embeddings.upsert(
             student_id,
@@ -221,10 +199,7 @@ class AttendanceService:
         top_k_score = float(np.mean(sample_scores[:2]))
         pose_weighted_score = POSE_SCORE_WEIGHT * top_k_score + CENTROID_SCORE_WEIGHT * centroid_score
         raw_match_score = max(best_sample_score, pose_weighted_score)
-        registered_brightness = mean_present([sample.brightness_score for sample in samples])
-        registered_blur = mean_present([sample.blur_score for sample in samples])
-        quality_margin = compute_quality_margin(quality_summary, registered_brightness, registered_blur)
-        final_score = round(min(0.99, raw_match_score + quality_margin), 3)
+        final_score = round(min(0.99, raw_match_score), 3)
 
         decision_breakdown = {
             "centroid_score": round(centroid_score, 3),
@@ -232,9 +207,6 @@ class AttendanceService:
             "top_k_score": round(top_k_score, 3),
             "pose_weighted_score": round(pose_weighted_score, 3),
             "raw_match_score": round(raw_match_score, 3),
-            "quality_margin": quality_margin,
-            "registered_brightness_mean": round(registered_brightness, 3) if registered_brightness is not None else None,
-            "registered_blur_mean": round(registered_blur, 3) if registered_blur is not None else None,
             "sample_scores": [round(score, 3) for score in sample_scores],
             "registered_pose_labels": [sample.pose_label for sample in samples],
             "registered_sample_count": len(samples),
@@ -308,11 +280,46 @@ class AttendanceService:
             meta=log_meta,
         )
 
-    def _save_registered_face_image(self, student_id: str, pose_label: str, file_bytes: bytes) -> str:
+    def _save_registered_face_image(
+        self,
+        student_id: str,
+        pose_label: str,
+        file_bytes: bytes,
+        previous_image_path: str | None = None,
+    ) -> str:
         root = Path(settings.uploads_dir)
         root.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-        filename = f"{safe_filename_part(student_id)}_{safe_filename_part(pose_label)}_{timestamp}.jpg"
+        student_part = safe_filename_part(student_id)
+        pose_part = safe_filename_part(pose_label)
+        filename = f"{student_part}_{pose_part}.jpg"
         path = root / filename
+        self._cleanup_registered_face_images(root, student_part, pose_part, previous_image_path, path)
         path.write_bytes(file_bytes)
         return str(path)
+
+    def _cleanup_registered_face_images(
+        self,
+        root: Path,
+        student_part: str,
+        pose_part: str,
+        previous_image_path: str | None,
+        current_path: Path,
+    ) -> None:
+        keep_path = current_path.resolve()
+        cleanup_candidates: set[Path] = set(root.glob(f"{student_part}_{pose_part}_*.jpg"))
+        if previous_image_path:
+            cleanup_candidates.add(Path(previous_image_path))
+
+        for candidate in cleanup_candidates:
+            try:
+                resolved = candidate.resolve(strict=False)
+            except OSError:
+                continue
+            if resolved == keep_path:
+                continue
+            try:
+                resolved.relative_to(root.resolve())
+            except ValueError:
+                continue
+            if resolved.exists():
+                resolved.unlink()

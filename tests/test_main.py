@@ -45,12 +45,16 @@ def make_image_bytes(pixel_value: int) -> bytes:
     return encoded.tobytes()
 
 
-def make_capture_meta(pose_label: str | None = None) -> str:
+def make_capture_meta(
+    pose_label: str | None = None,
+    *,
+    quality: dict[str, float] | None = None,
+) -> str:
     return json.dumps(
         {
             "challenge_sequence": ["front_blink" if pose_label == "front" else "turn_left_hold"],
             "challenge_result": "passed",
-            "quality": {"blur_score": 24.0, "brightness_mean": 128.0, "quality_score": 0.82},
+            "quality": quality or {"blur_score": 24.0, "brightness_mean": 128.0, "quality_score": 0.82},
             "anti_replay": {
                 "motion_corr": 0.22,
                 "flicker_peak_ratio": 1.1,
@@ -83,6 +87,34 @@ class AttendanceApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def register_pose_with_quality(
+        self,
+        student_id: str,
+        pose_label: str,
+        pixel_value: int,
+        *,
+        blur_score: float,
+        brightness_mean: float,
+        quality_score: float,
+    ) -> None:
+        response = self.client.post(
+            "/api/face/register",
+            files={"file": ("register.png", make_image_bytes(pixel_value), "image/png")},
+            data={
+                "student_id": student_id,
+                "pose_label": pose_label,
+                "capture_meta": make_capture_meta(
+                    pose_label,
+                    quality={
+                        "blur_score": blur_score,
+                        "brightness_mean": brightness_mean,
+                        "quality_score": quality_score,
+                    },
+                ),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_profile_upsert_and_get(self) -> None:
         upsert = self.client.post(
             "/api/profile/upsert",
@@ -100,6 +132,17 @@ class AttendanceApiTests(unittest.TestCase):
         detail = self.client.get("/api/profile/2026_SV01")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["full_name"], "Nguyen Van A")
+
+    def test_health_reports_effective_threshold_and_source_diagnostics(self) -> None:
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["similarity_threshold"], 0.7)
+        self.assertIn(payload["similarity_threshold_source"], {"dotenv_file", "process_env", "default"})
+        self.assertIn("env_file_path", payload)
+        self.assertIn("env_file_exists", payload)
+        self.assertIn("launch_cwd", payload)
 
     def test_register_three_pose_samples_and_profile(self) -> None:
         self.client.post("/api/profile/upsert", json={"student_id": "2026_SV01"})
@@ -119,6 +162,38 @@ class AttendanceApiTests(unittest.TestCase):
             self.assertEqual(len(samples), 3)
             self.assertTrue(all(sample.image_path for sample in samples))
             self.assertTrue(all(Path(sample.image_path).exists() for sample in samples))
+            self.assertTrue(all(Path(sample.image_path).name in {"2026_SV01_front.jpg", "2026_SV01_left.jpg", "2026_SV01_right.jpg"} for sample in samples))
+        finally:
+            session.close()
+
+    def test_reregister_same_pose_reuses_single_image_path_and_cleans_legacy_files(self) -> None:
+        self.client.post("/api/profile/upsert", json={"student_id": "2026_SV02"})
+        uploads_dir = Path(os.environ["UPLOADS_DIR"])
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        legacy_file = uploads_dir / "2026_SV02_front_20240101010101000000.jpg"
+        legacy_file.write_bytes(b"legacy")
+
+        self.register_pose("2026_SV02", "front", 10)
+        self.assertFalse(legacy_file.exists())
+
+        session = SessionLocal()
+        try:
+            sample = session.query(FaceEmbedding).filter(FaceEmbedding.student_id == "2026_SV02").one()
+            first_path = Path(sample.image_path)
+            self.assertEqual(first_path.name, "2026_SV02_front.jpg")
+            self.assertTrue(first_path.exists())
+        finally:
+            session.close()
+
+        self.register_pose("2026_SV02", "front", 13)
+
+        session = SessionLocal()
+        try:
+            sample = session.query(FaceEmbedding).filter(FaceEmbedding.student_id == "2026_SV02").one()
+            second_path = Path(sample.image_path)
+            self.assertEqual(second_path, first_path)
+            self.assertTrue(second_path.exists())
+            self.assertEqual(len(list(uploads_dir.glob("2026_SV02_front*.jpg"))), 1)
         finally:
             session.close()
 
@@ -155,6 +230,28 @@ class AttendanceApiTests(unittest.TestCase):
             self.assertIn("decision_breakdown", verify_logs[0].meta)
         finally:
             session.close()
+
+    def test_verify_final_score_matches_raw_match_score(self) -> None:
+        self.client.post("/api/profile/upsert", json={"student_id": "2026_SV11"})
+        self.register_pose_with_quality("2026_SV11", "front", 10, blur_score=40.0, brightness_mean=128.0, quality_score=0.9)
+        self.register_pose_with_quality("2026_SV11", "left", 11, blur_score=40.0, brightness_mean=128.0, quality_score=0.9)
+        self.register_pose_with_quality("2026_SV11", "right", 12, blur_score=40.0, brightness_mean=128.0, quality_score=0.9)
+
+        verify = self.client.post(
+            "/api/attendance/verify",
+            files={"file": ("verify.png", make_image_bytes(13), "image/png")},
+            data={
+                "student_id": "2026_SV11",
+                "capture_meta": make_capture_meta(
+                    quality={"blur_score": 44.0, "brightness_mean": 130.0, "quality_score": 0.92}
+                ),
+            },
+        )
+        self.assertEqual(verify.status_code, 200)
+        breakdown = verify.json()["meta"]["decision_breakdown"]
+        self.assertEqual(verify.json()["score"], breakdown["final_score"])
+        self.assertEqual(breakdown["final_score"], min(0.99, breakdown["raw_match_score"]))
+        self.assertNotIn("quality_margin", breakdown)
 
     def test_verify_without_enough_registered_samples_returns_failed(self) -> None:
         self.client.post("/api/profile/upsert", json={"student_id": "2026_SV09"})

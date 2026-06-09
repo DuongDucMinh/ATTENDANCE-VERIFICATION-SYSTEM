@@ -1,4 +1,21 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+function resolveApiBase() {
+  const envBase = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (!envBase) {
+    return "";
+  }
+
+  if (typeof window === "undefined") {
+    return envBase;
+  }
+
+  const pageHost = window.location.hostname;
+  const pageIsLocal = pageHost === "localhost" || pageHost === "127.0.0.1";
+  const apiIsLocal = envBase.startsWith("http://localhost") || envBase.startsWith("http://127.0.0.1");
+
+  return apiIsLocal && !pageIsLocal ? "" : envBase;
+}
+
+const API_BASE = resolveApiBase();
 
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}));

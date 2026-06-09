@@ -50,6 +50,20 @@ function getQualityWarning(quality) {
   return null;
 }
 
+function isNeutralRecognitionReady(alignment, mouthOpenRatio) {
+  const { alignment: alignmentThresholds, pose } = THRESHOLDS;
+  const neutralMouthMax = Math.max(0.18, pose.mouthOpenRatioMin * 0.75);
+  return (
+    alignment.aligned &&
+    alignment.centerCheck &&
+    alignment.sizeCheck &&
+    Math.abs(alignment.pose.yawAngle) <= alignmentThresholds.frontYawMax &&
+    Math.abs(alignment.pose.pitchAngle) <= alignmentThresholds.pitchMax &&
+    Math.abs(alignment.pose.rollAngle) <= alignmentThresholds.rollMax &&
+    (mouthOpenRatio ?? 0) <= neutralMouthMax
+  );
+}
+
 export default function CameraSession({ mode, studentId, active, onComplete, onStop }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
@@ -67,6 +81,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     challenge: null,
     alignmentReady: false,
     alignmentStartedAt: null,
+    verifyNeutralCapture: false,
+    neutralCaptureStartedAt: null,
+    neutralCapturePhaseStartedAt: null,
   });
 
   const [telemetry, setTelemetry] = useState({
@@ -102,6 +119,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     state.challenge = null;
     state.alignmentReady = false;
     state.alignmentStartedAt = null;
+    state.verifyNeutralCapture = false;
+    state.neutralCaptureStartedAt = null;
+    state.neutralCapturePhaseStartedAt = null;
     samplerRef.current.clear();
     setBlockingMessage("");
 
@@ -241,7 +261,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       });
     };
 
-    const finalizeBurst = async (step, submitMode) => {
+    const finalizeBurst = async ({ step = null, submitMode, poseLabel, challengeSequence }) => {
       const frames = samplerRef.current.getFrames();
       const rankedFrames = rankFrames(frames, { purpose: submitMode === "verify" ? "verify" : "quality" });
       const selected = rankedFrames[0];
@@ -261,7 +281,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       }
 
       const captureMeta = {
-        challenge_sequence: submitMode === "register" ? [step.type] : state.challenge.challengeSequence,
+        challenge_sequence: challengeSequence,
         challenge_result: "passed",
         quality: {
           blur_score: selected.quality.blurScore,
@@ -293,7 +313,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             max_y: Number(selected.frame.centerBox.maxY.toFixed(2)),
           },
         },
-        pose_label: step.poseTarget,
+        pose_label: poseLabel,
         telemetry: {
           quality_state: formatQualityState(selected.quality),
           outcome: outcome.reason,
@@ -306,6 +326,37 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       };
     };
 
+    const completeVerifyNeutralCapture = async () => {
+      if (state.processing || state.stopped) return;
+      state.processing = true;
+      setBlockingMessage("Dang tong hop anh xac nhan diem danh...");
+
+      try {
+        const { captureMeta, blob } = await finalizeBurst({
+          submitMode: "verify",
+          poseLabel: "front",
+          challengeSequence: state.challenge?.challengeSequence || [],
+        });
+        const data = await verifyAttendance(studentId, blob, captureMeta);
+        stopSession();
+        onComplete({
+          mode,
+          ok: data.status === "Success",
+          status: data.status,
+          studentId: data.student_id,
+          score: data.score,
+          reason: data.reason || null,
+          createdAt: data.created_at,
+          meta: data.meta,
+        });
+      } catch (error) {
+        failSession(error.message || "Khong the hoan tat challenge.");
+      } finally {
+        state.processing = false;
+        setBlockingMessage("");
+      }
+    };
+
     const handleStepCompletion = async (step) => {
       if (state.processing || state.stopped) return;
       state.processing = true;
@@ -313,7 +364,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
       try {
         if (mode === "register") {
-          const { captureMeta, blob } = await finalizeBurst(step, "register");
+          const { captureMeta, blob } = await finalizeBurst({
+            step,
+            submitMode: "register",
+            poseLabel: step.poseTarget,
+            challengeSequence: [step.type],
+          });
           const data = await registerFace(studentId, step.poseTarget, blob, captureMeta);
           const nextChallenge = advanceChallengeSession(state.challenge, performance.now());
           state.challenge = nextChallenge;
@@ -354,19 +410,16 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         }
 
         state.challenge = nextChallenge;
-        const { captureMeta, blob } = await finalizeBurst(step, "verify");
-        const data = await verifyAttendance(studentId, blob, captureMeta);
-        stopSession();
-        onComplete({
-          mode,
-          ok: data.status === "Success",
-          status: data.status,
-          studentId: data.student_id,
-          score: data.score,
-          reason: data.reason || null,
-          createdAt: data.created_at,
-          meta: data.meta,
+        state.verifyNeutralCapture = true;
+        state.neutralCaptureStartedAt = null;
+        state.neutralCapturePhaseStartedAt = performance.now();
+        samplerRef.current.clear();
+        setTelemetry({
+          status: "Dang diem danh",
+          hint: "Challenge da xong. Quay ve mat thang va giu on dinh de chup anh xac nhan.",
+          tone: "success",
         });
+        return;
       } catch (error) {
         failSession(error.message || "Khong the hoan tat challenge.");
       } finally {
@@ -404,6 +457,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const turnCenterCheck =
         alignment.centerOffsetX <= THRESHOLDS.alignment.turnCenterX &&
         alignment.centerOffsetY <= THRESHOLDS.alignment.turnCenterY;
+      const neutralRecognitionReady = isNeutralRecognitionReady(alignment, mouthOpenRatio);
 
       drawOverlay(
         alignment.displayBox,
@@ -416,13 +470,14 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         state.alignmentReady &&
         !state.processing &&
         samplingReady &&
-        state.frameIndex % FRAME_CONFIG.sampleEveryNFrames === 0
+        state.frameIndex % FRAME_CONFIG.sampleEveryNFrames === 0 &&
+        (mode !== "verify" || !state.verifyNeutralCapture || neutralRecognitionReady)
       ) {
         samplerRef.current.push({
           sourceImage: videoRef.current,
           sourceBox: alignment.sourceBox,
           centerBox: createExpandedContextBox(alignment.sourceBox, sourceImage.width, sourceImage.height),
-          challengeLabel: state.challenge?.prompt || "pre_alignment",
+          challengeLabel: state.verifyNeutralCapture ? "neutral_capture" : state.challenge?.prompt || "pre_alignment",
           frameIndex: state.frameIndex,
           timestamp: now,
           pose: {
@@ -502,6 +557,79 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
           hint: qualityWarning ?? preAlignHint,
           tone: qualityWarning ? "error" : preAlignTone,
+        });
+        return;
+      }
+
+      if (mode === "verify" && state.verifyNeutralCapture) {
+        updateDebug({
+          phase: "neutral_capture",
+          currentStepType: "neutral_capture",
+          currentStepPrompt: "Quay ve mat thang va giu on dinh de chup anh xac nhan.",
+          alignment,
+          ear,
+          mouthOpenRatio,
+          blinkDetected,
+          quality: previewQuality,
+        });
+
+        if (
+          state.neutralCapturePhaseStartedAt &&
+          now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyNeutralCaptureTimeoutMs
+        ) {
+          failSession("Da hoan tat challenge nhung khong giu duoc mat thang on dinh de chup anh xac nhan.");
+          return;
+        }
+
+        if (neutralRecognitionReady) {
+          state.neutralCaptureStartedAt = state.neutralCaptureStartedAt ?? now;
+          const heldMs = now - state.neutralCaptureStartedAt;
+          const remainingMs = Math.max(0, THRESHOLDS.session.verifyNeutralCaptureHoldMs - heldMs);
+
+          if (heldMs >= THRESHOLDS.session.verifyNeutralCaptureHoldMs) {
+            await completeVerifyNeutralCapture();
+            return;
+          }
+
+          setTelemetry({
+            status: "Dang diem danh",
+            hint: `Challenge da dat. Giu mat thang them ${(remainingMs / 1000).toFixed(1)}s de chup anh xac nhan.`,
+            tone: "success",
+          });
+          return;
+        }
+
+        state.neutralCaptureStartedAt = null;
+        let neutralHint = "Quay ve mat thang, nhin vao camera va giu khuon mat on dinh de chup anh xac nhan.";
+        let neutralTone = "info";
+        if (!alignment.centerCheck) {
+          neutralHint = "Canh bao: dua mat vao giua khung de chup anh xac nhan.";
+          neutralTone = "error";
+        } else if (!alignment.sizeCheck) {
+          neutralHint =
+            alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
+              ? "Canh bao: hay dua mat sat hon vao camera."
+              : "Canh bao: hay lui nhe ra sau.";
+          neutralTone = "error";
+        } else if (Math.abs(alignment.pose.yawAngle) > THRESHOLDS.alignment.frontYawMax) {
+          neutralHint = "Canh bao: hay quay mat ve thang truoc camera.";
+          neutralTone = "error";
+        } else if (Math.abs(alignment.pose.pitchAngle) > THRESHOLDS.alignment.pitchMax) {
+          neutralHint = "Canh bao: hay giu dau thang, khong cui hoac ngua.";
+          neutralTone = "error";
+        } else if (Math.abs(alignment.pose.rollAngle) > THRESHOLDS.alignment.rollMax) {
+          neutralHint = "Canh bao: hay giu dau thang, khong nghieng.";
+          neutralTone = "error";
+        } else if ((mouthOpenRatio ?? 0) > Math.max(0.18, THRESHOLDS.pose.mouthOpenRatioMin * 0.75)) {
+          neutralHint = "Canh bao: hay ngam mieng va giu bieu cam tu nhien.";
+          neutralTone = "error";
+        }
+
+        const qualityWarning = getQualityWarning(previewQuality);
+        setTelemetry({
+          status: "Dang diem danh",
+          hint: qualityWarning ?? neutralHint,
+          tone: qualityWarning ? "error" : neutralTone,
         });
         return;
       }
