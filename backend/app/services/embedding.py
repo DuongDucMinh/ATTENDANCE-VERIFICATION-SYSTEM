@@ -92,7 +92,13 @@ class LazyInsightFaceEmbeddingService:
         return self._service
 
     def warm_up(self) -> None:
-        self._ensure_service()
+        service = self._ensure_service()
+        try:
+            dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+            service.face_analysis.get(dummy_img)
+            LOGGER.info("InsightFace dummy inference warm-up completed successfully.")
+        except Exception as e:
+            LOGGER.warning("InsightFace dummy inference warm-up failed: %s", e)
 
     def extract_embedding(self, image_bgr: np.ndarray) -> np.ndarray:
         return self._ensure_service().extract_embedding(image_bgr)

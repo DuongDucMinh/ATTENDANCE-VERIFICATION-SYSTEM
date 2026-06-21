@@ -43,7 +43,7 @@ def build_router(embedding_service) -> APIRouter:
     router = APIRouter(prefix="/api")
 
     @router.post("/profile/upsert", response_model=ProfileResponse)
-    async def upsert_profile(payload: ProfileUpsertRequest, session: Session = Depends(get_db_session)) -> ProfileResponse:
+    def upsert_profile(payload: ProfileUpsertRequest, session: Session = Depends(get_db_session)) -> ProfileResponse:
         service = AttendanceService(session, embedding_service)
         user = service.upsert_profile(
             payload.student_id,
@@ -64,7 +64,7 @@ def build_router(embedding_service) -> APIRouter:
         )
 
     @router.get("/profile/{student_id}", response_model=ProfileResponse)
-    async def get_profile(student_id: str, session: Session = Depends(get_db_session)) -> ProfileResponse:
+    def get_profile(student_id: str, session: Session = Depends(get_db_session)) -> ProfileResponse:
         user = UserRepository(session).get(student_id.strip())
         if user is None:
             raise HTTPException(status_code=404, detail="Student profile was not found.")
@@ -96,7 +96,7 @@ def build_router(embedding_service) -> APIRouter:
         )
 
     @router.post("/face/register", response_model=ActionResponse)
-    async def register_face(
+    def register_face(
         student_id: str = Form(...),
         pose_label: str = Form(...),
         capture_meta: str | None = Form(None),
@@ -108,7 +108,7 @@ def build_router(embedding_service) -> APIRouter:
             result = AttendanceService(session, embedding_service).register_pose_sample(
                 student_id,
                 pose_label,
-                await file.read(),
+                file.file.read(),
                 parse_capture_meta(capture_meta),
             )
         except InvalidImageError as exc:
@@ -131,7 +131,7 @@ def build_router(embedding_service) -> APIRouter:
         )
 
     @router.post("/attendance/verify", response_model=ActionResponse)
-    async def verify_attendance(
+    def verify_attendance(
         student_id: str = Form(...),
         capture_meta: str | None = Form(None),
         file: UploadFile = File(...),
@@ -141,7 +141,7 @@ def build_router(embedding_service) -> APIRouter:
         try:
             result = AttendanceService(session, embedding_service).verify_probe(
                 student_id,
-                await file.read(),
+                file.file.read(),
                 parse_capture_meta(capture_meta),
             )
         except InvalidImageError as exc:
