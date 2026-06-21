@@ -73,6 +73,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
   const viewportRef = useRef(null);
   const cameraRef = useRef(null);
   const streamRef = useRef(null);
+  const faceMeshRef = useRef(null);
   const samplerRef = useRef(createFrameSampler());
   const sessionRef = useRef({
     stopped: false,
@@ -276,6 +277,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       state.stopped = true;
       clearTimeout(startupTimeout);
       cameraRef.current?.stop?.();
+      try {
+        faceMeshRef.current?.close?.();
+      } catch (err) {
+        console.error("Error closing FaceMesh:", err);
+      }
+      faceMeshRef.current = null;
       const stream = streamRef.current || videoRef.current?.srcObject;
       if (stream?.getTracks) {
         stream.getTracks().forEach((track) => track.stop());
@@ -928,7 +935,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       if (!videoRef.current || !overlayRef.current || !viewportRef.current) {
         throw new Error("Khung camera chưa sẵn sàng. Hãy bắt đầu lại.");
       }
-      if (!window.FaceMesh || !window.Camera) {
+      if (!window.FaceMesh) {
         throw new Error("Thư viện MediaPipe chưa tải xong. Hãy tải lại trang.");
       }
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -939,7 +946,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       }
 
       const faceMesh = new window.FaceMesh({
-        locateFile: (file) => `/libs/mediapipe/${file}`,
+        locateFile: (file) => `${window.location.origin}/libs/mediapipe/${file}`,
       });
       faceMesh.setOptions({
         maxNumFaces: 1,
@@ -953,6 +960,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           failSession(error.message || "Không thể xử lý khung hình camera.");
         });
       });
+      faceMeshRef.current = faceMesh;
 
       let stream;
       try {
@@ -970,34 +978,58 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         throw new Error(blocked ? "Trình duyệt đang chặn quyền truy cập camera." : "Không thể mở camera trên thiết bị này.");
       }
 
-      if (cancelled) return;
+      if (cancelled) {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+        }
+        return;
+      }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       if (cancelled) return;
       resizeCanvas();
 
+      let animationFrameId;
+      let lastTime = -1;
       let isAnalyzing = false;
-      const camera = new window.Camera(videoRef.current, {
-        onFrame: async () => {
-          if (sessionRef.current.stopped || sessionRef.current.processing) {
-            return;
+
+      const processFrame = async () => {
+        if (cancelled || sessionRef.current.stopped) return;
+
+        const video = videoRef.current;
+        if (video && !video.paused && video.currentTime !== lastTime && video.readyState >= 2) {
+          lastTime = video.currentTime;
+
+          if (!sessionRef.current.processing && !isAnalyzing) {
+            isAnalyzing = true;
+            try {
+              if (faceMeshRef.current) {
+                await faceMeshRef.current.send({ image: video });
+              }
+            } catch (err) {
+              console.error("Inference frame error:", err);
+            } finally {
+              isAnalyzing = false;
+            }
           }
-          if (isAnalyzing) return;
-          isAnalyzing = true;
-          try {
-            await faceMesh.send({ image: videoRef.current });
-          } catch (err) {
-            console.error("Inference frame error:", err);
-          } finally {
-            isAnalyzing = false;
+        }
+
+        if (!cancelled && !sessionRef.current.stopped) {
+          animationFrameId = requestAnimationFrame(processFrame);
+        }
+      };
+
+      // Bắt đầu vòng lặp xử lý khung hình
+      animationFrameId = requestAnimationFrame(processFrame);
+
+      cameraRef.current = {
+        stop: () => {
+          if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
           }
         },
-        width: 640,
-        height: 640,
-      });
-      cameraRef.current = camera;
-      await camera.start();
+      };
     };
 
     window.addEventListener("resize", resizeCanvas);
