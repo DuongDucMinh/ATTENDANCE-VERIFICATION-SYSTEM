@@ -25,69 +25,67 @@ export default function AttendancePage({ defaultStudentId }) {
     };
   }, []);
 
-  if (activeSession) {
-    return (
-      <CameraSession
-        mode="verify"
-        studentId={studentId}
-        active={activeSession}
-        onStop={() => setActiveSession(false)}
-        onComplete={(sessionResult) => {
-          setResult(sessionResult);
-          setActiveSession(false);
-        }}
-      />
-    );
-  }
-
   return (
     <div className="page-grid single">
       <section className="panel">
         <div className="panel-heading">
           <h2>Điểm danh</h2>
-          <p>Hệ thống sẽ tạo challenge ngẫu nhiên 2 bước để xác thực liveness, sau đó chụp ảnh khuôn mặt trung tính để xác thực danh tính sinh viên.</p>
+          <p>Phiên điểm danh sẽ tạo challenge ngẫu nhiên 2 bước. Sau khi challenge đạt, hệ thống sẽ chụp thêm 1 ảnh mặt thẳng ổn định rồi mới gửi lên backend để tính hybrid similarity.</p>
           {typeof runtimeConfig?.similarity_threshold === "number" ? (
-            <p style={{ marginTop: '8px', fontSize: '0.85rem' }}>
-              Ngưỡng similarity tối thiểu: <strong>{runtimeConfig.similarity_threshold.toFixed(3)}</strong>
+            <p>
+              Threshold backend runtime: {runtimeConfig.similarity_threshold.toFixed(3)}
               {runtimeConfig?.similarity_threshold_source ? ` (${runtimeConfig.similarity_threshold_source})` : ""}
             </p>
           ) : null}
         </div>
 
-        <label className="inline-field" style={{ marginTop: '16px' }}>
+        <label className="inline-field">
           <span>Mã sinh viên</span>
           <input value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="2026_SV01" />
         </label>
 
-        <div className="result-shell">
-          {result ? (
-            <article className={`result-card ${result.ok ? "success" : "error"}`}>
-              <h3>{result.ok ? "Điểm danh thành công" : "Điểm danh thất bại"}</h3>
-              <p>Mã sinh viên: {result.studentId}</p>
-              <p>Thời gian: {new Date(result.createdAt).toLocaleString("vi-VN")}</p>
-              {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
-              {typeof decision?.threshold === "number" ? <p>Ngưỡng: {decision.threshold.toFixed(3)}</p> : null}
-              {typeof decision?.raw_match_score === "number" ? <p>Điểm khớp thô: {decision.raw_match_score.toFixed(3)}</p> : null}
-              {result.reason ? <p>Lý do: {result.reason}</p> : null}
-            </article>
-          ) : (
-            <article className="empty-state">
-              <h3>Phiên điểm danh chưa bắt đầu</h3>
-              <p>Hệ thống camera sẽ mở khi bạn bấm nút bên dưới và tự động đóng sau khi có kết quả.</p>
-            </article>
-          )}
-          <button
-            className="primary-btn"
-            type="button"
-            disabled={!studentId.trim()}
-            onClick={() => {
-              setResult(null);
-              setActiveSession(true);
+        {!activeSession ? (
+          <div className="result-shell">
+            {result ? (
+              <article className={`result-card ${result.ok ? "success" : "error"}`}>
+                <h3>{result.ok ? "Điểm danh thành công" : "Điểm danh thất bại"}</h3>
+                <p>Mã sinh viên: {result.studentId}</p>
+                <p>Thời gian: {new Date(result.createdAt).toLocaleString("vi-VN")}</p>
+                {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
+                {typeof decision?.threshold === "number" ? <p>Threshold đang dùng: {decision.threshold.toFixed(3)}</p> : null}
+                {typeof decision?.raw_match_score === "number" ? <p>Raw match score: {decision.raw_match_score.toFixed(3)}</p> : null}
+                {result.reason ? <p>Lý do: {result.reason}</p> : null}
+              </article>
+            ) : (
+              <article className="empty-state">
+                <h3>Phiên điểm danh chưa bắt đầu</h3>
+                <p>Camera chỉ mở khi bạn bấm bắt đầu và sẽ tự tắt sau khi có kết quả.</p>
+              </article>
+            )}
+            <button
+              className="primary-btn"
+              type="button"
+              disabled={!studentId.trim()}
+              onClick={() => {
+                setResult(null);
+                setActiveSession(true);
+              }}
+            >
+              Bắt đầu điểm danh
+            </button>
+          </div>
+        ) : (
+          <CameraSession
+            mode="verify"
+            studentId={studentId}
+            active={activeSession}
+            onStop={() => setActiveSession(false)}
+            onComplete={(sessionResult) => {
+              setResult(sessionResult);
+              setActiveSession(false);
             }}
-          >
-            Bắt đầu điểm danh
-          </button>
-        </div>
+          />
+        )}
       </section>
     </div>
   );

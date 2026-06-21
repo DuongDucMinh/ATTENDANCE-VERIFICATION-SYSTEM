@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AttendancePage from "./components/AttendancePage";
 import ProfilePage from "./components/ProfilePage";
 
 const NAV_ITEMS = [
-  { key: "profile", label: "Hồ sơ" },
+  { key: "profile", label: "Thông tin cá nhân" },
   { key: "attendance", label: "Điểm danh" },
 ];
 
@@ -25,14 +25,35 @@ export default function App() {
     }
   }, [profile]);
 
+  const heroText = useMemo(
+    () =>
+      activeTab === "profile"
+        ? "Quản lý hồ sơ cá nhân và đăng ký khuôn mặt."
+        : "Bắt đầu điểm danh, xác minh xong là kết thúc phiên.",
+    [activeTab],
+  );
+
   return (
     <div className="app-shell">
-      <header className="top-bar">
-        <div className="brand-title">
-          <span className="brand-logo">⚡</span>
-          <h2>Edge-AI Attendance</h2>
+      <aside className="sidebar">
+        <div className="brand-block">
+          <p className="eyebrow">EDGE-AI ATTENDANCE</p>
+          <h1>Attendance Verification</h1>
+          <p>{heroText}</p>
         </div>
-      </header>
+        <nav className="sidebar-nav">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
+              onClick={() => setActiveTab(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
 
       <main className="content-area">
         {activeTab === "profile" ? (
@@ -46,22 +67,6 @@ export default function App() {
           <AttendancePage defaultStudentId={profile.student_id} />
         )}
       </main>
-
-      <nav className="bottom-nav">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`bottom-nav-btn ${activeTab === item.key ? "active" : ""}`}
-            onClick={() => setActiveTab(item.key)}
-          >
-            <span className="nav-icon">
-              {item.key === "profile" ? "👤" : "✅"}
-            </span>
-            <span className="nav-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }

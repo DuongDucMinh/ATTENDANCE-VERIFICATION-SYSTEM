@@ -25,12 +25,12 @@ export function createChallengeSteps(mode) {
     timeoutMs: verifyStepTimeoutMs,
     prompt:
       type === "blink_twice"
-        ? "Thử thách: Chớp mắt 2 lần liên tiếp."
+        ? "Challenge: chop mat 2 lan lien tiep."
         : type === "turn_left_hold"
-          ? "Thử thách: Quay mặt sang trái nhẹ và giữ 0.4 giây."
+          ? "Challenge: quay mat sang trai nhe va giu 0.4 giay."
           : type === "turn_right_hold"
-            ? "Thử thách: Quay mặt sang phải nhẹ và giữ 0.4 giây."
-            : "Thử thách: Há miệng rõ trong khung hình.",
+            ? "Challenge: quay mat sang phai nhe va giu 0.4 giay."
+            : "Challenge: mo mieng ro trong khung hinh.",
     poseTarget: type === "turn_left_hold" ? "left" : type === "turn_right_hold" ? "right" : "front",
   }));
 }
@@ -60,8 +60,8 @@ function isStepAligned(step, metrics) {
     return (
       (metrics.turnCenterCheck ?? metrics.centerCheck) &&
       metrics.sizeCheck &&
-      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 1.5 &&
-      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 1.3 &&
+      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax &&
+      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax &&
       metrics.pose.yawAngle <= pose.leftYawMin
     );
   }
@@ -69,8 +69,8 @@ function isStepAligned(step, metrics) {
     return (
       (metrics.turnCenterCheck ?? metrics.centerCheck) &&
       metrics.sizeCheck &&
-      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 1.5 &&
-      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 1.3 &&
+      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax &&
+      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax &&
       metrics.pose.yawAngle >= pose.rightYawMin
     );
   }
@@ -94,22 +94,22 @@ export function evaluateChallengeFrame(session, metrics) {
     session.mode === "verify" ? THRESHOLDS.session.verifySessionTimeoutMs : THRESHOLDS.session.registerSessionTimeoutMs;
   if (!currentStep) {
     return {
-      session: { ...session, status: "completed", prompt: "Hoàn tất thử thách.", poseTarget: "front" },
+      session: { ...session, status: "completed", prompt: "Hoan tat challenge.", poseTarget: "front" },
       event: { type: "session_complete" },
     };
   }
 
   if (metrics.timestamp - session.sessionStartedAt > overallTimeout) {
     return {
-      session: { ...session, status: "failed", reason: "Vượt quá thời gian cho phép của phiên điểm danh." },
-      event: { type: "session_failed", reason: "Vượt quá thời gian cho phép của phiên điểm danh." },
+      session: { ...session, status: "failed", reason: "Vuot qua thoi gian cho phep cua phien challenge." },
+      event: { type: "session_failed", reason: "Vuot qua thoi gian cho phep cua phien challenge." },
     };
   }
 
   if (metrics.timestamp - session.stepStartedAt > currentStep.timeoutMs) {
     return {
-      session: { ...session, status: "failed", reason: "Không hoàn thành thử thách đúng thời gian." },
-      event: { type: "session_failed", reason: "Không hoàn thành thử thách đúng thời gian." },
+      session: { ...session, status: "failed", reason: "Khong hoan tat challenge hien tai dung thoi gian." },
+      event: { type: "session_failed", reason: "Khong hoan tat challenge hien tai dung thoi gian." },
     };
   }
 
@@ -178,7 +178,7 @@ export function advanceChallengeSession(session, now) {
       ...session,
       currentStepIndex: nextStepIndex,
       status: "completed",
-      prompt: "Hoàn tất thử thách.",
+      prompt: "Hoan tat challenge.",
       poseTarget: "front",
       reason: null,
     };
