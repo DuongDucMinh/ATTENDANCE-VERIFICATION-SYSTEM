@@ -44,9 +44,9 @@ function formatQualityState(quality) {
 function getQualityWarning(quality) {
   if (!quality) return null;
   const { blurMin, brightnessMin, brightnessMax } = THRESHOLDS.quality;
-  if (quality.blurScore < blurMin) return "Canh bao: camera dang mo, hay giu may on dinh hoac tang anh sang.";
-  if (quality.brightnessMean < brightnessMin) return "Canh bao: anh dang qua toi, hay tang anh sang.";
-  if (quality.brightnessMean > brightnessMax) return "Canh bao: anh dang qua sang, hay giam nguon sang truc tiep.";
+  if (quality.blurScore < blurMin) return "Cảnh báo: Camera đang mờ, hãy giữ máy ổn định hoặc tăng ánh sáng.";
+  if (quality.brightnessMean < brightnessMin) return "Cảnh báo: Ảnh đang quá tối, hãy tăng ánh sáng.";
+  if (quality.brightnessMean > brightnessMax) return "Cảnh báo: Ảnh đang quá sáng, hãy giảm nguồn sáng trực tiếp.";
   return null;
 }
 
@@ -64,6 +64,29 @@ function isNeutralRecognitionReady(alignment, mouthOpenRatio) {
   );
 }
 
+let globalFaceMesh = null;
+
+if (typeof window !== "undefined" && window.FaceMesh) {
+  try {
+    globalFaceMesh = new window.FaceMesh({
+      locateFile: (file) => `/libs/mediapipe/${file}`,
+    });
+    globalFaceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6,
+    });
+    const dummyCanvas = document.createElement("canvas");
+    dummyCanvas.width = 1;
+    dummyCanvas.height = 1;
+    globalFaceMesh.send({ image: dummyCanvas }).catch(() => {});
+  } catch (e) {
+    console.warn("Failed early FaceMesh initialization:", e);
+  }
+}
+
+
 export default function CameraSession({ mode, studentId, active, onComplete, onStop }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
@@ -80,6 +103,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     blinkFrameCount: 0,
     challenge: null,
     alignmentReady: false,
+    alignmentPhaseStartedAt: null,
     alignmentStartedAt: null,
     verifyNeutralCapture: false,
     neutralCaptureStartedAt: null,
@@ -87,10 +111,24 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
   });
 
   const [telemetry, setTelemetry] = useState({
-    status: "Cho bat dau",
-    hint: "Thong bao: bam bat dau de mo camera.",
+    status: "Chờ bắt đầu",
+    hint: "Thông báo: Bấm bắt đầu để mở camera.",
     tone: "info",
   });
+
+  const updateTelemetry = (nextVal) => {
+    setTelemetry((prev) => {
+      const resolved = typeof nextVal === "function" ? nextVal(prev) : nextVal;
+      if (
+        prev.status === resolved.status &&
+        prev.hint === resolved.hint &&
+        prev.tone === resolved.tone
+      ) {
+        return prev;
+      }
+      return resolved;
+    });
+  };
   const [debugState, setDebugState] = useState({
     phase: "pre_alignment",
     currentStepType: null,
@@ -105,6 +143,125 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     quality: null,
   });
   const [blockingMessage, setBlockingMessage] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
+
+  const lastPlayedRef = useRef({ name: "", timestamp: 0 });
+  const audioCacheRef = useRef({});
+
+  const showDebugRef = useRef(false);
+  const lastDebugUpdateRef = useRef(0);
+
+  useEffect(() => {
+    showDebugRef.current = showDebug;
+  }, [showDebug]);
+
+  const playAudio = (name, minIntervalMs = 2000) => {
+    const now = performance.now();
+    const last = lastPlayedRef.current;
+    
+    if (last.name === name && now - last.timestamp < minIntervalMs) {
+      return;
+    }
+
+    try {
+      if (window.currentPlayingAudio) {
+        window.currentPlayingAudio.pause();
+        window.currentPlayingAudio.currentTime = 0;
+      }
+
+      let audio = audioCacheRef.current[name];
+      if (!audio) {
+        audio = new Audio(`/audio/${name}.mp3`);
+        audioCacheRef.current[name] = audio;
+      }
+      
+      window.currentPlayingAudio = audio;
+      audio.play().catch((err) => {
+        console.warn("Audio autoplay blocked by browser or failed:", err);
+      });
+      lastPlayedRef.current = { name, timestamp: now };
+    } catch (e) {
+      console.error("Failed to play audio:", e);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (window.currentPlayingAudio) {
+        window.currentPlayingAudio.pause();
+        window.currentPlayingAudio.currentTime = 0;
+        window.currentPlayingAudio = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!telemetry.hint) return;
+    let text = telemetry.hint.toLowerCase();
+    
+    let audioFile = null;
+    
+    if (text.includes("chờ bắt đầu") || text.includes("bấm bắt đầu")) {
+      // do nothing
+    } else if (text.includes("quay sang trái theo yêu cầu")) {
+      audioFile = "turn_left";
+    } else if (text.includes("quay sang phải theo yêu cầu")) {
+      audioFile = "turn_right";
+    } else if (
+      text.includes("không thấy khuôn mặt") ||
+      text.includes("khong thay khuon mat") ||
+      text.includes("đưa mặt vào đúng khung") ||
+      text.includes("đưa mặt vào khung")
+    ) {
+      audioFile = "align";
+    } else if (
+      text.includes("vùng trung tâm") ||
+      text.includes("giữa khung") ||
+      text.includes("giữa") ||
+      text.includes("cân giữa") ||
+      text.includes("gia khung") ||
+      text.includes("cai giua")
+    ) {
+      audioFile = "center";
+    } else if (text.includes("sát hơn") || text.includes("sat hon")) {
+      audioFile = "closer";
+    } else if (text.includes("lùi nhẹ") || text.includes("lui nhe")) {
+      audioFile = "further";
+    } else if (text.includes("chớp mắt 1 lần") || text.includes("chop mat 1 lan")) {
+      audioFile = "blink_once";
+    } else if (text.includes("chớp mắt 2 lần") || text.includes("chop mat 2 lan")) {
+      audioFile = "blink_twice";
+    } else if (text.includes("quay mặt sang trái") || text.includes("quay sang trai") || text.includes("xoay đầu sang trái") || text.includes("xoay sang trai")) {
+      audioFile = "turn_left";
+    } else if (text.includes("quay mặt sang phải") || text.includes("quay sang phai") || text.includes("xoay đầu sang phải") || text.includes("xoay sang phai")) {
+      audioFile = "turn_right";
+    } else if (text.includes("há miệng") || text.includes("mo mieng") || text.includes("mở miệng")) {
+      audioFile = "open_mouth";
+    } else if (
+      text.includes("nhìn thẳng") ||
+      text.includes("quay ve mat thang") ||
+      text.includes("nhìn vào camera") ||
+      text.includes("nhin vao camera") ||
+      text.includes("đầu thẳng") ||
+      text.includes("nghiêng đầu") ||
+      text.includes("cúi hoặc ngửa") ||
+      text.includes("ngậm miệng")
+    ) {
+      audioFile = "neutral";
+    }
+
+    if (audioFile) {
+      playAudio(audioFile);
+    }
+  }, [telemetry.hint]);
+
+  useEffect(() => {
+    if (telemetry.status === "Success" || telemetry.status === "Registered" || telemetry.hint?.includes("thành công") || telemetry.hint?.includes("thanh cong")) {
+      playAudio("success", 0);
+    } else if (telemetry.status === "Failed" || telemetry.hint?.includes("thất bại") || telemetry.hint?.includes("that bai")) {
+      playAudio("fail", 0);
+    }
+  }, [telemetry.status]);
 
   useEffect(() => {
     if (!active || !studentId.trim()) return undefined;
@@ -118,6 +275,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     state.blinkFrameCount = 0;
     state.challenge = null;
     state.alignmentReady = false;
+    state.alignmentPhaseStartedAt = null;
     state.alignmentStartedAt = null;
     state.verifyNeutralCapture = false;
     state.neutralCaptureStartedAt = null;
@@ -127,9 +285,16 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
     let cancelled = false;
 
+    const startupTimeout = setTimeout(() => {
+      if (!state.stopped && !state.processing && state.alignmentPhaseStartedAt === null) {
+        failSession("Không thể khởi động camera hoặc bộ nhận diện khuôn mặt. Vui lòng thử lại.");
+      }
+    }, 15000);
+
     const stopSession = ({ notifyParent = false } = {}) => {
       if (state.stopped) return;
       state.stopped = true;
+      clearTimeout(startupTimeout);
       cameraRef.current?.stop?.();
       const stream = streamRef.current || videoRef.current?.srcObject;
       if (stream?.getTracks) {
@@ -224,6 +389,11 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     };
 
     const updateDebug = ({ phase, currentStepType, currentStepPrompt, alignment, ear, mouthOpenRatio, blinkDetected, quality }) => {
+      if (!showDebugRef.current) return;
+      const now = performance.now();
+      if (now - lastDebugUpdateRef.current < 200) return;
+      lastDebugUpdateRef.current = now;
+
       setDebugState({
         phase,
         currentStepType,
@@ -266,7 +436,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const rankedFrames = rankFrames(frames, { purpose: submitMode === "verify" ? "verify" : "quality" });
       const selected = rankedFrames[0];
       if (!selected) {
-        throw new Error("Khong thu duoc frame hop le cho challenge hien tai.");
+        throw new Error("Không thu được khung hình hợp lệ cho thử thách hiện tại.");
       }
 
       const antiReplay = { motionCorr: 0, flickerPeakRatio: 0, stripeScore: 0, moireScore: 0 };
@@ -329,7 +499,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     const completeVerifyNeutralCapture = async () => {
       if (state.processing || state.stopped) return;
       state.processing = true;
-      setBlockingMessage("Dang tong hop anh xac nhan diem danh...");
+      setBlockingMessage("Đang tổng hợp ảnh xác nhận điểm danh...");
 
       try {
         const { captureMeta, blob } = await finalizeBurst({
@@ -337,7 +507,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           poseLabel: "front",
           challengeSequence: state.challenge?.challengeSequence || [],
         });
-        const data = await verifyAttendance(studentId, blob, captureMeta);
+        const data = await verifyAttendance(studentId, blob, captureMeta, (attempt) => {
+          setBlockingMessage(`Kết nối mạng yếu, đang thử gửi lại lần ${attempt}...`);
+        });
         stopSession();
         onComplete({
           mode,
@@ -350,7 +522,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           meta: data.meta,
         });
       } catch (error) {
-        failSession(error.message || "Khong the hoan tat challenge.");
+        failSession(error.message || "Không thể hoàn thành thử thách.");
       } finally {
         state.processing = false;
         setBlockingMessage("");
@@ -360,7 +532,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     const handleStepCompletion = async (step) => {
       if (state.processing || state.stopped) return;
       state.processing = true;
-      setBlockingMessage(mode === "register" ? `Dang luu mau ${step.poseTarget}...` : "Dang tong hop ket qua diem danh...");
+      setBlockingMessage(mode === "register" ? `Đang lưu mẫu ${step.poseTarget}...` : "Đang tổng hợp kết quả điểm danh...");
 
       try {
         if (mode === "register") {
@@ -370,7 +542,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             poseLabel: step.poseTarget,
             challengeSequence: [step.type],
           });
-          const data = await registerFace(studentId, step.poseTarget, blob, captureMeta);
+          const data = await registerFace(studentId, step.poseTarget, blob, captureMeta, (attempt) => {
+            setBlockingMessage(`Kết nối mạng yếu, đang thử gửi lại lần ${attempt}...`);
+          });
           const nextChallenge = advanceChallengeSession(state.challenge, performance.now());
           state.challenge = nextChallenge;
           samplerRef.current.clear();
@@ -389,9 +563,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             return;
           }
 
-          setTelemetry({
-            status: "Dang dang ky khuon mat",
-            hint: `Mau ${step.poseTarget} da luu. ${nextChallenge.prompt}`,
+          updateTelemetry({
+            status: "Đang đăng ký khuôn mặt",
+            hint: `Mẫu ${step.poseTarget} đã lưu. ${nextChallenge.prompt}`,
             tone: "success",
           });
           return;
@@ -400,9 +574,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         const nextChallenge = advanceChallengeSession(state.challenge, performance.now());
         if (nextChallenge.status !== "completed") {
           state.challenge = nextChallenge;
-          setTelemetry((current) => ({
+          updateTelemetry((current) => ({
             ...current,
-            status: "Dang diem danh",
+            status: "Đang điểm danh",
             hint: nextChallenge.prompt,
             tone: "info",
           }));
@@ -414,14 +588,14 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         state.neutralCaptureStartedAt = null;
         state.neutralCapturePhaseStartedAt = performance.now();
         samplerRef.current.clear();
-        setTelemetry({
-          status: "Dang diem danh",
-          hint: "Challenge da xong. Quay ve mat thang va giu on dinh de chup anh xac nhan.",
+        updateTelemetry({
+          status: "Đang chụp ảnh xác nhận",
+          hint: "Thử thách đã xong. Quay về mặt thẳng và giữ ổn định 1 giây để chụp ảnh xác nhận.",
           tone: "success",
         });
         return;
       } catch (error) {
-        failSession(error.message || "Khong the hoan tat challenge.");
+        failSession(error.message || "Không thể hoàn thành thử thách.");
       } finally {
         state.processing = false;
         setBlockingMessage("");
@@ -432,15 +606,58 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const faceLandmarks = results.multiFaceLandmarks?.[0];
       const sourceImage = results.image;
       if (!sourceImage || state.stopped) return;
-      resizeCanvas();
+
+      const now = performance.now();
+      if (state.alignmentPhaseStartedAt === null) {
+        state.alignmentPhaseStartedAt = now;
+        clearTimeout(startupTimeout);
+      }
+
       state.frameIndex += 1;
 
       if (!faceLandmarks) {
         drawOverlay(null, null, "info");
-        setTelemetry((current) => ({
+
+        if (!state.alignmentReady) {
+          const phaseStartedAt = state.alignmentPhaseStartedAt ?? now;
+          state.alignmentPhaseStartedAt = phaseStartedAt;
+
+          if (now - phaseStartedAt > THRESHOLDS.session.verifyStabilityTimeoutMs) {
+            failSession("Đã quá thời gian giữ ổn định 1 giây trước thử thách.");
+            return;
+          }
+
+          updateTelemetry((current) => ({
+            ...current,
+            status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
+            hint: "Cảnh báo: Không thấy khuôn mặt. Hãy đưa mặt vào khung và giữ ổn định 1 giây.",
+            tone: "error",
+          }));
+          return;
+        }
+
+        if (mode === "verify" && state.verifyNeutralCapture) {
+          if (
+            state.neutralCapturePhaseStartedAt &&
+            now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyStabilityTimeoutMs
+          ) {
+            failSession("Đã quá thời gian giữ ổn định 1 giây để chụp ảnh xác nhận.");
+            return;
+          }
+
+          updateTelemetry((current) => ({
+            ...current,
+            status: "Đang chụp ảnh xác nhận",
+            hint: "Cảnh báo: Không thấy khuôn mặt. Hãy quay lại giữ mặt thẳng ổn định 1 giây để chụp ảnh xác nhận.",
+            tone: "error",
+          }));
+          return;
+        }
+
+        updateTelemetry((current) => ({
           ...current,
-          status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
-          hint: "Canh bao: khong thay khuon mat trong camera.",
+          status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
+          hint: "Cảnh báo: Không thấy khuôn mặt trong camera.",
           tone: "error",
         }));
         return;
@@ -452,7 +669,6 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const ear = (leftEar + rightEar) / 2;
       const mouthOpenRatio = computeMouthOpenRatio(faceLandmarks, sourceImage.width, sourceImage.height);
       const blinkDetected = updateBlinkState(ear, alignment.aligned);
-      const now = performance.now();
       const currentStep = state.challenge?.steps?.[state.challenge.currentStepIndex] ?? null;
       const turnCenterCheck =
         alignment.centerOffsetX <= THRESHOLDS.alignment.turnCenterX &&
@@ -509,6 +725,14 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           quality: previewQuality,
         });
 
+        if (
+          state.alignmentPhaseStartedAt &&
+          now - state.alignmentPhaseStartedAt > THRESHOLDS.session.verifyStabilityTimeoutMs
+        ) {
+          failSession("Đã quá thời gian giữ ổn định 1 giây trước thử thách.");
+          return;
+        }
+
         if (alignment.aligned) {
           state.alignmentStartedAt = state.alignmentStartedAt ?? now;
           const heldMs = now - state.alignmentStartedAt;
@@ -516,30 +740,31 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
           if (heldMs >= THRESHOLDS.session.alignmentHoldMs) {
             state.alignmentReady = true;
+            state.alignmentPhaseStartedAt = null;
             state.challenge = createChallengeSession(mode, now);
             samplerRef.current.clear();
-            setTelemetry({
-              status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
+            updateTelemetry({
+              status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
               hint: state.challenge.prompt,
               tone: "success",
             });
             return;
           }
 
-          setTelemetry({
-            status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
-            hint: `Thong bao: giu nguyen tu the trong khung them ${(remainingMs / 1000).toFixed(1)}s truoc khi bat dau challenge.`,
+          updateTelemetry({
+            status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
+            hint: `Thông báo: Giữ nguyên tư thế trong khung 1 giây trước khi bắt đầu thử thách. Còn lại ${(remainingMs / 1000).toFixed(1)}s.`,
             tone: "info",
           });
           return;
         }
 
         state.alignmentStartedAt = null;
-        let preAlignHint = "Thong bao: dua mat vao dung khung va giu on dinh truoc khi bat dau challenge.";
+        let preAlignHint = "Thông báo: Đưa mặt vào đúng khung và giữ ổn định 1 giây trước khi bắt đầu thử thách.";
         let preAlignTone = "info";
 
         if (!alignment.centerCheck) {
-          preAlignHint = "Canh bao: dua mat vao giua khung.";
+          preAlignHint = "Cảnh báo: Đưa mặt vào giữa khung.";
           preAlignTone = "error";
         } else if (!alignment.poseState.ok) {
           preAlignHint = alignment.poseState.label;
@@ -547,14 +772,14 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         } else if (!alignment.sizeCheck) {
           preAlignHint =
             alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-              ? "Canh bao: hay dua mat sat hon vao camera."
-              : "Canh bao: hay lui nhe ra sau.";
+              ? "Cảnh báo: Hãy đưa mặt sát hơn vào camera."
+              : "Cảnh báo: Hãy lùi nhẹ ra sau.";
           preAlignTone = "error";
         }
 
         const qualityWarning = getQualityWarning(previewQuality);
-        setTelemetry({
-          status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
+        updateTelemetry({
+          status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
           hint: qualityWarning ?? preAlignHint,
           tone: qualityWarning ? "error" : preAlignTone,
         });
@@ -565,7 +790,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         updateDebug({
           phase: "neutral_capture",
           currentStepType: "neutral_capture",
-          currentStepPrompt: "Quay ve mat thang va giu on dinh de chup anh xac nhan.",
+          currentStepPrompt: "Quay về mặt thẳng và giữ ổn định 1 giây để chụp ảnh xác nhận.",
           alignment,
           ear,
           mouthOpenRatio,
@@ -575,9 +800,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
         if (
           state.neutralCapturePhaseStartedAt &&
-          now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyNeutralCaptureTimeoutMs
+          now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyStabilityTimeoutMs
         ) {
-          failSession("Da hoan tat challenge nhung khong giu duoc mat thang on dinh de chup anh xac nhan.");
+          failSession("Đã quá thời gian giữ ổn định 1 giây để chụp ảnh xác nhận.");
           return;
         }
 
@@ -591,43 +816,43 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             return;
           }
 
-          setTelemetry({
-            status: "Dang diem danh",
-            hint: `Challenge da dat. Giu mat thang them ${(remainingMs / 1000).toFixed(1)}s de chup anh xac nhan.`,
+          updateTelemetry({
+            status: "Đang chụp ảnh xác nhận",
+            hint: `Thử thách đã đạt. Giữ mặt thẳng 1 giây để chụp ảnh xác nhận. Còn lại ${(remainingMs / 1000).toFixed(1)}s.`,
             tone: "success",
           });
           return;
         }
 
         state.neutralCaptureStartedAt = null;
-        let neutralHint = "Quay ve mat thang, nhin vao camera va giu khuon mat on dinh de chup anh xac nhan.";
+        let neutralHint = "Quay về mặt thẳng, nhìn vào camera và giữ khuôn mặt ổn định 1 giây để chụp ảnh xác nhận.";
         let neutralTone = "info";
         if (!alignment.centerCheck) {
-          neutralHint = "Canh bao: dua mat vao giua khung de chup anh xac nhan.";
+          neutralHint = "Cảnh báo: Đưa mặt vào giữa khung để chụp ảnh xác nhận và giữ ổn định 1 giây.";
           neutralTone = "error";
         } else if (!alignment.sizeCheck) {
           neutralHint =
             alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-              ? "Canh bao: hay dua mat sat hon vao camera."
-              : "Canh bao: hay lui nhe ra sau.";
+              ? "Cảnh báo: Hãy đưa mặt sát hơn vào camera."
+              : "Cảnh báo: Hãy lùi nhẹ ra sau.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.yawAngle) > THRESHOLDS.alignment.frontYawMax) {
-          neutralHint = "Canh bao: hay quay mat ve thang truoc camera.";
+          neutralHint = "Cảnh báo: Hãy quay mặt thẳng về trước camera.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.pitchAngle) > THRESHOLDS.alignment.pitchMax) {
-          neutralHint = "Canh bao: hay giu dau thang, khong cui hoac ngua.";
+          neutralHint = "Cảnh báo: Hãy giữ đầu thẳng, không cúi hoặc ngửa.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.rollAngle) > THRESHOLDS.alignment.rollMax) {
-          neutralHint = "Canh bao: hay giu dau thang, khong nghieng.";
+          neutralHint = "Cảnh báo: Hãy giữ đầu thẳng, không nghiêng.";
           neutralTone = "error";
         } else if ((mouthOpenRatio ?? 0) > Math.max(0.18, THRESHOLDS.pose.mouthOpenRatioMin * 0.75)) {
-          neutralHint = "Canh bao: hay ngam mieng va giu bieu cam tu nhien.";
+          neutralHint = "Cảnh báo: Hãy ngậm miệng và giữ biểu cảm tự nhiên.";
           neutralTone = "error";
         }
 
         const qualityWarning = getQualityWarning(previewQuality);
-        setTelemetry({
-          status: "Dang diem danh",
+        updateTelemetry({
+          status: "Đang chụp ảnh xác nhận",
           hint: qualityWarning ?? neutralHint,
           tone: qualityWarning ? "error" : neutralTone,
         });
@@ -667,22 +892,22 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const isTurnChallenge = currentStep?.type === "turn_left_hold" || currentStep?.type === "turn_right_hold";
 
       if (currentStep?.type === "turn_left_hold" && alignment.pose.yawAngle > THRESHOLDS.alignment.wrongTurnYaw) {
-        hint = "Canh bao: ban dang quay sang phai, hay quay sang trai theo yeu cau.";
+        hint = "Cảnh báo: Bạn đang quay sang phải, hãy quay sang trái theo yêu cầu.";
         tone = "error";
       } else if (currentStep?.type === "turn_right_hold" && alignment.pose.yawAngle < -THRESHOLDS.alignment.wrongTurnYaw) {
-        hint = "Canh bao: ban dang quay sang trai, hay quay sang phai theo yeu cau.";
+        hint = "Cảnh báo: Bạn đang quay sang trái, hãy quay sang phải theo yêu cầu.";
         tone = "error";
       } else if (!alignment.centerCheck && !isTurnChallenge) {
-        hint = "Canh bao: dua mat vao giua khung.";
+        hint = "Cảnh báo: Đưa mặt vào giữa khung.";
         tone = "error";
       } else if (isTurnChallenge && !turnCenterCheck) {
-        hint = "Canh bao: khi quay mat, van can giu khuon mat nam trong vung trung tam mo rong.";
+        hint = "Cảnh báo: Khi quay mặt, vẫn cần giữ khuôn mặt nằm trong vùng trung tâm.";
         tone = "error";
       } else if (isTurnChallenge && Math.abs(alignment.pose.rollAngle) > THRESHOLDS.alignment.rollMax) {
-        hint = "Canh bao: ban dang nghieng dau, hay giu dau thang khi quay mat.";
+        hint = "Cảnh báo: Bạn đang nghiêng đầu, hãy giữ đầu thẳng khi quay mặt.";
         tone = "error";
       } else if (isTurnChallenge && Math.abs(alignment.pose.pitchAngle) > THRESHOLDS.alignment.pitchMax) {
-        hint = "Canh bao: khong cui hoac ngua dau khi thuc hien quay mat.";
+        hint = "Cảnh báo: Không cúi hoặc ngửa đầu khi thực hiện quay mặt.";
         tone = "error";
       } else if (!isTurnChallenge && !alignment.poseState.ok) {
         hint = alignment.poseState.label;
@@ -690,8 +915,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       } else if (!alignment.sizeCheck) {
         hint =
           alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-            ? "Canh bao: hay dua mat sat hon vao camera."
-            : "Canh bao: hay lui nhe ra sau.";
+            ? "Cảnh báo: Hãy đưa mặt sát hơn vào camera."
+            : "Cảnh báo: Hãy lùi nhẹ ra sau.";
         tone = "error";
       }
 
@@ -701,8 +926,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         tone = "error";
       }
 
-      setTelemetry({
-        status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
+      updateTelemetry({
+        status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
         hint,
         tone,
       });
@@ -714,37 +939,41 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
     const start = async () => {
       resizeCanvas();
-      setTelemetry({
-        status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
-        hint: "Thong bao: dua mat vao dung khung va giu on dinh truoc khi bat dau challenge.",
+      updateTelemetry({
+        status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
+        hint: "Thông báo: Đưa mặt vào đúng khung và giữ ổn định 1 giây trước khi bắt đầu thử thách.",
         tone: "info",
       });
 
       if (!videoRef.current || !overlayRef.current || !viewportRef.current) {
-        throw new Error("Khung camera chua san sang. Hay bat dau lai.");
+        throw new Error("Khung camera chưa sẵn sàng. Hãy bắt đầu lại.");
       }
       if (!window.FaceMesh || !window.Camera) {
-        throw new Error("MediaPipe chua tai xong. Hay tai lai trang.");
+        throw new Error("Thư viện MediaPipe chưa tải xong. Hãy tải lại trang.");
       }
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Trinh duyet hien tai khong ho tro camera.");
+        throw new Error("Trình duyệt hiện tại không hỗ trợ camera.");
       }
       if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-        throw new Error("Camera yeu cau HTTPS hoac localhost.");
+        throw new Error("Camera yêu cầu kết nối HTTPS hoặc localhost.");
       }
 
-      const faceMesh = new window.FaceMesh({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
-      });
-      faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6,
-      });
+      if (!globalFaceMesh) {
+        globalFaceMesh = new window.FaceMesh({
+          locateFile: (file) => `/libs/mediapipe/${file}`,
+        });
+        globalFaceMesh.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.6,
+        });
+      }
+      const faceMesh = globalFaceMesh;
       faceMesh.onResults((results) => {
+        if (sessionRef.current.stopped) return;
         handleLandmarkResults(results).catch((error) => {
-          failSession(error.message || "Khong the xu ly khung hinh camera.");
+          failSession(error.message || "Không thể xử lý khung hình camera.");
         });
       });
 
@@ -761,7 +990,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         });
       } catch (error) {
         const blocked = error?.name === "NotAllowedError" || error?.name === "SecurityError";
-        throw new Error(blocked ? "Trinh duyet dang chan quyen camera." : "Khong the mo camera tren thiet bi nay.");
+        throw new Error(blocked ? "Trình duyệt đang chặn quyền truy cập camera." : "Không thể mở camera trên thiết bị này.");
       }
 
       if (cancelled) return;
@@ -769,11 +998,22 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       if (cancelled) return;
+      resizeCanvas();
 
+      let isAnalyzing = false;
       const camera = new window.Camera(videoRef.current, {
         onFrame: async () => {
-          if (!sessionRef.current.stopped && !sessionRef.current.processing) {
+          if (sessionRef.current.stopped || sessionRef.current.processing) {
+            return;
+          }
+          if (isAnalyzing) return;
+          isAnalyzing = true;
+          try {
             await faceMesh.send({ image: videoRef.current });
+          } catch (err) {
+            console.error("Inference frame error:", err);
+          } finally {
+            isAnalyzing = false;
           }
         },
         width: 640,
@@ -783,13 +1023,16 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       await camera.start();
     };
 
+    window.addEventListener("resize", resizeCanvas);
+
     start().catch((error) => {
       if (cancelled) return;
-      failSession(error.message || "Khong the mo camera.");
+      failSession(error.message || "Không thể mở camera.");
     });
 
     return () => {
       cancelled = true;
+      window.removeEventListener("resize", resizeCanvas);
       stopSession();
     };
   }, [active, studentId, mode, onComplete, onStop]);
@@ -800,70 +1043,89 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
   return (
     <section className="camera-surface">
+      <div className="camera-header">
+        <h3>{mode === "register" ? "Đăng ký khuôn mặt" : "Xác nhận điểm danh"}</h3>
+        <button type="button" className="close-btn" onClick={onStop} aria-label="Đóng camera">✕</button>
+      </div>
+
       <div className="camera-layout">
-        <div className="debug-panel">
-          <strong>Debug realtime</strong>
-          {renderDebugRow("Pha", debugState.phase)}
-          {renderDebugRow("Buoc", debugState.currentStepPrompt || "--")}
-          {renderDebugRow("Can giua", alignmentStatus ? "Dat" : "Chua dat", alignmentStatus ? "pass" : "fail")}
-          {renderDebugRow("Kich thuoc", debugState.sizeCheck ? "Dat" : "Chua dat", debugState.sizeCheck ? "pass" : "fail")}
-          {renderDebugRow(
-            "Pose",
-            `yaw=${debugState.pose?.yawAngle ?? "--"} pitch=${debugState.pose?.pitchAngle ?? "--"} roll=${debugState.pose?.rollAngle ?? "--"}`,
-          )}
-          {renderDebugRow(
-            "EAR / Blink",
-            `${debugState.ear ?? "--"} | ${debugState.blinkDetected ? "DETECTED" : "NO"}`,
-            debugState.blinkDetected ? "pass" : "neutral",
-          )}
-          {debugState.currentStepType === "open_mouth"
-            ? renderDebugRow(
-                "Mouth open",
-                `${debugState.mouthOpenRatio ?? "--"} / ${THRESHOLDS.pose.mouthOpenRatioMin}`,
-                debugState.mouthOpenRatio != null
-                  ? debugState.mouthOpenRatio >= THRESHOLDS.pose.mouthOpenRatioMin
-                    ? "pass"
-                    : "fail"
-                  : "neutral",
-              )
-            : null}
-          {renderDebugRow(
-            "Do net",
-            `${debugState.quality?.blurScore ?? "--"} / ${THRESHOLDS.quality.blurMin}`,
-            debugState.quality ? (debugState.quality.blurScore >= THRESHOLDS.quality.blurMin ? "pass" : "fail") : "neutral",
-          )}
-          {renderDebugRow(
-            "Do sang",
-            `${debugState.quality?.brightnessMean ?? "--"} / [${THRESHOLDS.quality.brightnessMin}, ${THRESHOLDS.quality.brightnessMax}]`,
-            debugState.quality
-              ? debugState.quality.brightnessMean >= THRESHOLDS.quality.brightnessMin &&
-                debugState.quality.brightnessMean <= THRESHOLDS.quality.brightnessMax
-                ? "pass"
-                : "fail"
-              : "neutral",
-          )}
-          {renderDebugRow(
-            "Quality",
-            `${debugState.quality?.qualityScore ?? "--"} / ${THRESHOLDS.quality.qualityMin}`,
-            debugState.quality ? (debugState.quality.qualityScore >= THRESHOLDS.quality.qualityMin ? "pass" : "fail") : "neutral",
-          )}
-        </div>
         <div ref={viewportRef} className="viewport">
           <video ref={videoRef} autoPlay playsInline muted />
           <canvas ref={overlayRef} />
           <div className={`oval-guide ${telemetry.tone === "success" ? "ready" : telemetry.tone === "error" ? "error" : "tracking"}`} />
-          <div className="telemetry">
-            <span>Trang thai: {telemetry.status}</span>
-            <span>{telemetry.hint}</span>
+          
+          <div className={`hud-card ${telemetry.tone}`}>
+            <div className="hud-eyebrow">{telemetry.status}</div>
+            <div className="hud-instruction">{telemetry.hint}</div>
           </div>
+
           {blockingMessage ? (
             <div className="blocking-overlay" role="status" aria-live="polite">
               <div className="spinner" />
               <strong>{blockingMessage}</strong>
-              <span>Vui long giu nguyen trang cho toi khi co ket qua.</span>
+              <span>Vui lòng giữ nguyên trang cho tới khi có kết quả.</span>
             </div>
           ) : null}
         </div>
+
+        <div className="camera-controls">
+          <button type="button" className="ghost-btn cancel-btn" onClick={onStop}>
+            Hủy bỏ
+          </button>
+          <button type="button" className="ghost-btn debug-toggle-btn" onClick={() => setShowDebug(!showDebug)}>
+            {showDebug ? "Ẩn debug" : "Hiện debug"}
+          </button>
+        </div>
+
+        {showDebug && (
+          <div className="debug-panel">
+            <strong>Debug realtime</strong>
+            {renderDebugRow("Pha", debugState.phase)}
+            {renderDebugRow("Buoc", debugState.currentStepPrompt || "--")}
+            {renderDebugRow("Can giua", alignmentStatus ? "Dat" : "Chua dat", alignmentStatus ? "pass" : "fail")}
+            {renderDebugRow("Kich thuoc", debugState.sizeCheck ? "Dat" : "Chua dat", debugState.sizeCheck ? "pass" : "fail")}
+            {renderDebugRow(
+              "Pose",
+              `yaw=${debugState.pose?.yawAngle ?? "--"} pitch=${debugState.pose?.pitchAngle ?? "--"} roll=${debugState.pose?.rollAngle ?? "--"}`,
+            )}
+            {renderDebugRow(
+              "EAR / Blink",
+              `${debugState.ear ?? "--"} | ${debugState.blinkDetected ? "DETECTED" : "NO"}`,
+              debugState.blinkDetected ? "pass" : "neutral",
+            )}
+            {debugState.currentStepType === "open_mouth"
+              ? renderDebugRow(
+                  "Mouth open",
+                  `${debugState.mouthOpenRatio ?? "--"} / ${THRESHOLDS.pose.mouthOpenRatioMin}`,
+                  debugState.mouthOpenRatio != null
+                    ? debugState.mouthOpenRatio >= THRESHOLDS.pose.mouthOpenRatioMin
+                      ? "pass"
+                      : "fail"
+                    : "neutral",
+                )
+              : null}
+            {renderDebugRow(
+              "Do net",
+              `${debugState.quality?.blurScore ?? "--"} / ${THRESHOLDS.quality.blurMin}`,
+              debugState.quality ? (debugState.quality.blurScore >= THRESHOLDS.quality.blurMin ? "pass" : "fail") : "neutral",
+            )}
+            {renderDebugRow(
+              "Do sang",
+              `${debugState.quality?.brightnessMean ?? "--"} / [${THRESHOLDS.quality.brightnessMin}, ${THRESHOLDS.quality.brightnessMax}]`,
+              debugState.quality
+                ? debugState.quality.brightnessMean >= THRESHOLDS.quality.brightnessMin &&
+                  debugState.quality.brightnessMean <= THRESHOLDS.quality.brightnessMax
+                  ? "pass"
+                  : "fail"
+                : "neutral",
+            )}
+            {renderDebugRow(
+              "Quality",
+              `${debugState.quality?.qualityScore ?? "--"} / ${THRESHOLDS.quality.qualityMin}`,
+              debugState.quality ? (debugState.quality.qualityScore >= THRESHOLDS.quality.qualityMin ? "pass" : "fail") : "neutral",
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

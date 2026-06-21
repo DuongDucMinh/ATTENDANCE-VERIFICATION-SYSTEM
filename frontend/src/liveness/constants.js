@@ -22,12 +22,12 @@ export const FRAME_CONFIG = {
 
 export const THRESHOLDS = {
   session: {
-    alignmentHoldMs: 1200,
+    alignmentHoldMs: 1000,
     poseHoldMs: 400,
-    verifyStepTimeoutMs: 8000,
+    verifyStepTimeoutMs: 10000,
     verifySessionTimeoutMs: 20000,
-    verifyNeutralCaptureHoldMs: 600,
-    verifyNeutralCaptureTimeoutMs: 6000,
+    verifyNeutralCaptureHoldMs: 1000,
+    verifyStabilityTimeoutMs: 10000,
     registerSessionTimeoutMs: 30000,
   },
   blink: {
