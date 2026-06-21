@@ -64,28 +64,7 @@ function isNeutralRecognitionReady(alignment, mouthOpenRatio) {
   );
 }
 
-let globalFaceMesh = null;
-
-if (typeof window !== "undefined" && window.FaceMesh) {
-  try {
-    globalFaceMesh = new window.FaceMesh({
-      locateFile: (file) => `/libs/mediapipe/${file}`,
-    });
-    globalFaceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6,
-    });
-    globalFaceMesh.onResults(() => {});
-    const dummyCanvas = document.createElement("canvas");
-    dummyCanvas.width = 1;
-    dummyCanvas.height = 1;
-    globalFaceMesh.send({ image: dummyCanvas }).catch(() => {});
-  } catch (e) {
-    console.warn("Failed early FaceMesh initialization:", e);
-  }
-}
+// FaceMesh is instantiated on-demand per camera session to ensure clean resources.
 
 
 export default function CameraSession({ mode, studentId, active, onComplete, onStop }) {
@@ -959,18 +938,15 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         throw new Error("Camera yêu cầu kết nối HTTPS hoặc localhost.");
       }
 
-      if (!globalFaceMesh) {
-        globalFaceMesh = new window.FaceMesh({
-          locateFile: (file) => `/libs/mediapipe/${file}`,
-        });
-        globalFaceMesh.setOptions({
-          maxNumFaces: 1,
-          refineLandmarks: true,
-          minDetectionConfidence: 0.6,
-          minTrackingConfidence: 0.6,
-        });
-      }
-      const faceMesh = globalFaceMesh;
+      const faceMesh = new window.FaceMesh({
+        locateFile: (file) => `/libs/mediapipe/${file}`,
+      });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
       faceMesh.onResults((results) => {
         if (sessionRef.current.stopped) return;
         handleLandmarkResults(results).catch((error) => {
