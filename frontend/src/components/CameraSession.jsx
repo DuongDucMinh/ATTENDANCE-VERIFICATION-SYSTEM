@@ -77,6 +77,7 @@ if (typeof window !== "undefined" && window.FaceMesh) {
       minDetectionConfidence: 0.6,
       minTrackingConfidence: 0.6,
     });
+    globalFaceMesh.onResults(() => {});
     const dummyCanvas = document.createElement("canvas");
     dummyCanvas.width = 1;
     dummyCanvas.height = 1;
