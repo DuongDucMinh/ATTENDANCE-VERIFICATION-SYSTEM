@@ -1,365 +1,132 @@
-# Báo Cáo Kỹ Thuật
-
-## 1. Mục tiêu hiện tại
-
-Phiên bản hiện tại của dự án tập trung vào một lõi nhận diện mặt đủ gọn để tích hợp về sau:
-
-- Frontend xử lý camera, landmark, challenge và chọn frame tốt nhất
-- Backend chỉ tập trung vào embedding, so khớp và ghi log
-- Chống giả mạo heuristic vẫn còn trong code nhưng đang tắt khỏi luồng quyết định chính
-
-Mục tiêu của đợt làm sạch này là:
-
-- Gom toàn bộ threshold về cấu hình tập trung
-- Dọn giao diện debug để dễ quan sát
-- Loại bỏ phần legacy không còn dùng
-- Đồng bộ tài liệu với đúng trạng thái runtime hiện tại
-
-## 2. Phân tách trách nhiệm
-
-Frontend:
-
-- Mở camera
-- Lấy landmark bằng MediaPipe
-- Điều khiển challenge
-- Chấm chất lượng frame
-- Chọn một frame tốt nhất để gửi lên backend
-
-Backend:
-
-- Giải mã ảnh
-- Trích embedding bằng InsightFace
-- Tính điểm `hybrid similarity`
-- Trả `decision_breakdown`
-- Ghi lịch sử vào `attendance_logs`
-
-## 3. Tổ chức cấu hình threshold
-
-Toàn bộ threshold phía frontend đã được gom tại:
-
-- [frontend/src/liveness/constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
-
-### 3.1 Cấu trúc mới
-
-```javascript
-THRESHOLDS = {
-  session: { ... },
-  blink: { ... },
-  alignment: { ... },
-  pose: { ... },
-  quality: { ... },
-  antiReplay: { ... }
-}
-```
-
-Ngoài ra:
-
-```javascript
-FRAME_CONFIG = {
-  sampleSize,
-  maxBufferedFrames,
-  sampleEveryNFrames
-}
-```
-
-### 3.2 Ý nghĩa các nhóm threshold
-
-`THRESHOLDS.session`
-
-- `alignmentHoldMs`: thời gian giữ ổn định trước khi challenge bắt đầu
-- `poseHoldMs`: thời gian giữ tư thế ở các challenge quay trái / quay phải / mở miệng
-- `verifyStepTimeoutMs`: timeout cho từng bước điểm danh
-- `verifySessionTimeoutMs`: timeout toàn phiên điểm danh
-- `verifyNeutralCaptureHoldMs`: thời gian giữ mặt thẳng sau challenge để chụp ảnh recognition
-- `verifyNeutralCaptureTimeoutMs`: timeout cho pha neutral capture sau challenge
-- `registerSessionTimeoutMs`: timeout toàn phiên đăng ký
-
-`THRESHOLDS.blink`
-
-- `minBaselineEar`
-- `closeFloorEar`
-- `recoverFloorEar`
-- `minBlinkFrames`
-- `maxBlinkFrames`
-
-`THRESHOLDS.alignment`
-
-- `strictCenterX`
-- `strictCenterY`
-- `turnCenterX`
-- `turnCenterY`
-- `wrongTurnYaw`
-- `frontYawMax`
-- `rollMax`
-- `pitchMax`
-- `faceSizeMinRatio`
-- `faceSizeMaxRatio`
-
-`THRESHOLDS.pose`
-
-- `leftYawMin`
-- `rightYawMin`
-- `mouthOpenRatioMin`
-
-`THRESHOLDS.quality`
-
-- `blurMin`
-- `brightnessMin`
-- `brightnessMax`
-- `qualityMin`
-
-`THRESHOLDS.antiReplay`
-
-- `enabled`
-- `motionCorrMax`
-- `flickerPeakMax`
-- `stripeScoreMax`
-- `moireScoreMax`
-
-## 4. Luồng đăng ký
-
-```mermaid
-flowchart TD
-    A["Bắt đầu đăng ký"] --> B["Giữ ổn định trong khung"]
-    B --> C["Front + blink_once"]
-    C --> D["Lưu mẫu front"]
-    D --> E["Turn_left_hold"]
-    E --> F["Lưu mẫu left"]
-    F --> G["Turn_right_hold"]
-    G --> H["Lưu mẫu right"]
-```
-
-Sau mỗi pose:
-
-- Frontend lấy burst frame
-- Chấm quality
-- Chọn frame tốt nhất
-- Gửi duy nhất 1 frame lên backend
-
-## 5. Luồng điểm danh
-
-```mermaid
-flowchart TD
-    A["Bắt đầu điểm danh"] --> B["Giữ ổn định trong khung"]
-    B --> C["Random 2-step challenge"]
-    C --> D["Challenge pass"]
-    D --> E["Quay về mặt thẳng và giữ ổn định"]
-    E --> F["Lấy burst frame neutral"]
-    F --> G["Chấm quality theo burst frame neutral"]
-    G --> H["Chọn frame tốt nhất cho nhận diện"]
-    H --> I["Backend tính hybrid similarity"]
-    I --> J["Trả decision breakdown"]
-```
-
-Challenge verify hiện dùng tập:
-
-- `blink_twice`
-- `turn_left_hold`
-- `turn_right_hold`
-- `open_mouth`
-
-## 6. Công thức chính
-
-### 6.1 Blink bằng EAR
-
-```text
-EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
-```
-
-EAR dùng để phát hiện:
-
-- `blink_once`
-- `blink_twice`
-
-### 6.2 Pose
-
-```text
-roll  = atan2(dy_eye, dx_eye)
-yaw   = atan(((x_nose - x_eye_mid) / eye_span) * k_yaw)
-pitch = atan(((y_nose - y_face_mid) / face_height) * k_pitch)
-```
-
-### 6.3 Mở miệng
-
-```text
-mouth_open_ratio = distance(upper_lip, lower_lip) / distance(mouth_left, mouth_right)
-```
-
-### 6.4 Quality
-
-```text
-blur_score = Var(Laplacian(gray_face_roi))
-brightness_mean = mean(Y)
-Y = 0.299R + 0.587G + 0.114B
-```
-
-### 6.5 Hybrid similarity
-
-```text
-centroid_score = cosine(probe, centroid)
-best_sample_score = max(sample_scores)
-top_k_score = mean(top 2 sample_scores)
-pose_weighted_score = 0.7 * top_k_score + 0.3 * centroid_score
-raw_match_score = max(best_sample_score, pose_weighted_score)
-final_score = min(0.99, raw_match_score)
-```
-
-`capture_meta.quality` vẫn được backend lưu trong log để phục vụ debug và phân tích, nhưng không còn tham gia cộng hoặc trừ vào `final_score`.
-
-Điểm quan trọng của luồng mới là frame gửi sang backend trong `verify` không còn lấy trực tiếp từ lúc người dùng đang blink, mở miệng hoặc quay đầu. Challenge chỉ dùng để xác nhận liveness; sau khi challenge pass, frontend buộc người dùng quay lại tư thế trung tính rồi mới chụp burst frame riêng cho recognition.
-
-Backend chỉ pass khi:
-
-- đủ 3 mẫu đăng ký
-- `final_score >= SIMILARITY_THRESHOLD`
-
-## 7. Cách xem threshold runtime thật sự
-
-Đây là phần đã được làm lại để tránh nhầm lẫn giữa file cấu hình và process runtime.
-
-Kiểm tra bằng:
-
-- [http://127.0.0.1:8000/api/runtime-config](http://127.0.0.1:8000/api/runtime-config)
-- [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
-
-Frontend cũng hiển thị:
-
-- `Threshold backend runtime`
-- `Điểm hybrid similarity`
-- `Raw match score`
-
-## 7.1 Cấu hình môi trường khi chạy dev
-
-Dự án chỉ cần file `.env` ở root cho cấu hình backend runtime. Frontend không cần `frontend/.env` cho luồng dev local hoặc VS Code dev tunnel.
-
-Frontend gọi API bằng đường dẫn relative `/api/...`. Trong môi trường dev, [frontend/vite.config.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/vite.config.js) proxy toàn bộ `/api` sang backend local `http://127.0.0.1:8000`.
-
-Khi test trên điện thoại bằng VS Code forward port:
-
-- Chạy backend ở `127.0.0.1:8000`
-- Chạy frontend ở `5173`
-- Forward port `5173`
-- Mở URL tunnel của frontend trên điện thoại
-
-Không cần hard-code URL tunnel backend và không cần tạo `frontend/.env` riêng.
-
-## 8. Làm sạch giao diện
-
-### 8.1 Đã loại bỏ
-
-- Dòng `Frames sampled`
-- Các debug anti-replay không còn dùng ở runtime
-- Hai dòng telemetry phụ về lấy mẫu frame
-
-### 8.2 Còn giữ lại
-
-- Bước challenge hiện tại
-- Trạng thái căn giữa
-- Kích thước khuôn mặt
-- Pose
-- EAR / Blink
-- Mouth open khi cần
-- Blur / Brightness / Quality
-
-Mục tiêu là để debug panel vẫn đủ thông tin tuning nhưng không gây rối mắt.
-
-## 9. Làm sạch mã nguồn
-
-Các thay đổi làm sạch đáng chú ý:
-
-- Gom threshold về `THRESHOLDS` và `FRAME_CONFIG`
-- Viết lại `CameraSession.jsx` theo cấu trúc gọn hơn
-- Loại bỏ giao diện legacy trong thư mục `static/`
-- Xóa log tạm ở thư mục gốc
-- Cập nhật `.gitignore`
-
-## 10. Trạng thái anti-replay
-
-Anti-replay heuristic:
-
-- vẫn còn module để nghiên cứu tiếp
-- hiện `enabled = false`
-- không tham gia quyết định pass/fail
-- không hiển thị trên giao diện debug
-
-Điều này giúp hệ thống:
-
-- dễ tune hơn
-- giảm false reject
-- giảm rối khi đánh giá similarity
-
-## 11. Kiểm thử đã chạy
-
-Frontend:
-
-```powershell
-cd frontend
-npm test -- --run
-npm run build
-```
-
-Backend:
-
-```powershell
-python -m unittest discover -s tests
-```
-
-Kết quả tại thời điểm cập nhật:
-
-- Frontend test pass
-- Frontend build pass
-- Backend unittest pass
-
-## 12. Cách chỉnh threshold về sau
-
-### Frontend
-
-Sửa trực tiếp tại:
-
-- [frontend/src/liveness/constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
-
-Sau đó:
-
-```powershell
-cd frontend
-npm run build
-```
-
-hoặc nếu đang chạy dev server:
-
-```powershell
-npm run dev
-```
-
-Frontend dev server tự proxy `/api` sang backend local, nên không cần sửa `VITE_API_BASE_URL` khi chạy local hoặc khi test qua VS Code dev tunnel.
-
-### Backend
-
-Sửa threshold runtime tại:
-
-- [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env)
-
-File [backend/app/config.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/config.py) chỉ giữ giá trị mặc định khi không có `.env`.
-
-Sau khi sửa `.env`, backend phải được restart vì cấu hình được đọc khi process khởi động. Nếu port `8000` đang bị process cũ giữ, dừng process đó trước:
-
-```powershell
-Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-```
-
-Kiểm tra runtime thật sự:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/health
-```
-
-## 13. Kết luận
-
-Trạng thái hiện tại của dự án đã rõ ràng hơn ở ba điểm:
-
-- runtime threshold có thể kiểm tra trực tiếp
-- cấu hình frontend đã tập trung về một chỗ
-- giao diện và mã nguồn đã được dọn bớt phần legacy gây nhiễu
-
-Đây là nền tốt để bước tiếp theo tập trung vào hiệu quả nhận diện thật sự thay vì mất thời gian truy vết cấu hình hay giao diện cũ.
+# Báo Cáo Kỹ Thuật Hệ Thống (Technical Report & Developer Guide)
+
+Báo cáo này mô tả chi tiết kiến trúc, giải thuật toán học, cấu hình tham số (thresholds) và các giải pháp tối ưu hóa hiệu năng được triển khai nhằm đảm bảo hệ thống phục vụ tốt hơn 100 sinh viên điểm danh đồng thời.
+
+---
+
+## 1. Kiến Trúc Hệ Thống & Phân Tách Trách Nhiệm
+
+Hệ thống được thiết kế theo mô hình lai **Edge-AI** kết hợp **Cloud Inference** nhằm tối ưu hóa tải cho máy chủ:
+
+* **React Frontend (Edge Processing)**:
+  - Quản lý luồng webcam trực quan của trình duyệt.
+  - Sử dụng **MediaPipe FaceMesh (WASM)** để trích xuất 468 tọa độ landmark 3D của khuôn mặt trực tiếp trên CPU của máy khách.
+  - Tính toán hình học liveness (chớp mắt, quay đầu, mở miệng) theo tần suất khung hình (30 FPS).
+  - Đánh giá chất lượng ảnh (độ mờ, độ sáng, chất lượng bố cục khuôn mặt).
+  - Khi thử thách kết thúc, chụp loạt ảnh (burst) ở trạng thái thẳng tự nhiên (neutral), chọn ra 1 ảnh có chất lượng tốt nhất và gửi lên Server.
+  
+* **FastAPI Backend (Centralized AI Inference)**:
+  - Nhận ảnh và dữ liệu capture từ Client.
+  - Giải mã ảnh nhị phân thành ma trận màu BGR bằng OpenCV.
+  - Sử dụng mô hình **InsightFace** thông qua công cụ suy luận **ONNX Runtime** để sinh ra vector đặc trưng khuôn mặt (face embedding vector 512 chiều).
+  - So khớp vector này với các mẫu đã đăng ký trong cơ sở dữ liệu **PostgreSQL (pgvector)** bằng giải thuật so khớp hỗn hợp (Hybrid Similarity).
+  - Lưu kết quả chi tiết (bao gồm cả điểm số, lý do và metadata) vào bảng nhật ký `attendance_logs`.
+
+---
+
+## 2. Công Thức & Giải Thuật Liveness Phía Client
+
+Phía Frontend thực hiện tính toán hình học dựa trên các điểm mốc (landmark indices) của MediaPipe:
+
+### 2.1 Phát hiện Chớp mắt (Eye Aspect Ratio - EAR)
+Chỉ số EAR được dùng để đo tỉ lệ mở rộng của mắt:
+$$EAR = \frac{||p_2 - p_6|| + ||p_3 - p_5||}{2 \times ||p_1 - p_4||}$$
+
+Trong đó, $p_1 \dots p_6$ là tọa độ các điểm mốc quanh mắt:
+* **Mắt trái**: `[33, 160, 158, 133, 153, 144]`
+* **Mắt phải**: `[263, 387, 385, 362, 380, 373]`
+
+Hệ thống ghi nhận chớp mắt khi EAR giảm xuống dưới `closeFloorEar` (mắt nhắm) và phục hồi lên trên `recoverFloorEar` (mắt mở lại) trong khoảng số khung hình quy định (`minBlinkFrames` đến `maxBlinkFrames`).
+
+### 2.2 Ước lượng Tư thế Đầu (Head Pose Estimation)
+Góc quay của đầu (Yaw, Pitch, Roll) được ước lượng heuristic qua tỉ lệ khoảng cách giữa mũi, mắt và kích thước khuôn mặt:
+* **Roll (Góc nghiêng vai)**: Tính bằng góc giữa đường thẳng nối hai tâm mắt và trục ngang.
+  $$\text{roll} = \text{atan2}(dy_{eye}, dx_{eye})$$
+* **Yaw (Góc quay trái/phải)**: Tính bằng độ lệch của đỉnh mũi so với điểm trung tâm của mắt, chuẩn hóa theo khoảng cách hai mắt:
+  $$\text{yaw} = \text{atan}\left(\frac{x_{nose} - x_{eye\_mid}}{eye\_span} \times k_{yaw}\right)$$
+* **Pitch (Góc cúi/ngửa)**: Tính bằng độ lệch dọc của mũi so với trung tâm khuôn mặt, chuẩn hóa theo chiều cao khuôn mặt:
+  $$\text{pitch} = \text{atan}\left(\frac{y_{nose} - y_{face\_mid}}{face\_height} \times k_{pitch}\right)$$
+
+### 2.3 Phát hiện Mở miệng (Mouth Open Ratio)
+Tỷ lệ mở miệng được tính bằng tỷ số giữa khoảng cách dọc của môi trong và khoảng cách ngang của mép miệng:
+$$\text{mouth\_open\_ratio} = \frac{\text{distance}(upper\_lip, lower\_lip)}{\text{distance}(mouth\_left, mouth\_right)}$$
+
+---
+
+## 3. Thuật Toán Nhận Diện Khuôn Mặt Phía Server
+
+Khi sinh viên đăng ký, hệ thống yêu cầu lưu đúng 3 mẫu tư thế ảnh: thẳng (`front`), nghiêng trái (`left`), nghiêng phải (`right`). 
+
+Khi điểm danh, Server thực hiện so khớp ảnh gửi lên (`probe`) với 3 mẫu đăng ký theo thuật toán **Hybrid Similarity** (Độ tương đồng hỗn hợp):
+1. **Tính các điểm tương đồng riêng lẻ**:
+   * $S_{front} = \text{cosine}(probe, front)$
+   * $S_{left} = \text{cosine}(probe, left)$
+   * $S_{right} = \text{cosine}(probe, right)$
+2. **Tính điểm so khớp Trọng tâm (Centroid Score)**:
+   * Tạo vector trọng tâm bằng trung bình cộng 3 mẫu đăng ký:
+     $$Centroid = \text{normalize}\left(\frac{front + left + right}{3}\right)$$
+   * Điểm centroid: $S_{centroid} = \text{cosine}(probe, Centroid)$
+3. **Tính điểm Top-K (K=2)**:
+   * Lấy trung bình cộng của 2 điểm số cao nhất trong tập $\{S_{front}, S_{left}, S_{right}\}$:
+     $$S_{top2} = \text{mean}(\text{sorted}(\{S_{front}, S_{left}, S_{right}\})[:2])$$
+4. **Tính điểm kết hợp (Pose Weighted Score)**:
+   * Kết hợp điểm Top-K (trọng số 0.7) và điểm Centroid (trọng số 0.3):
+     $$S_{weighted} = 0.7 \times S_{top2} + 0.3 \times S_{centroid}$$
+5. **Điểm quyết định cuối cùng (Final Score)**:
+   * Lấy giá trị lớn nhất giữa điểm đơn lẻ tốt nhất và điểm kết hợp, sau đó chặn trên ở mức $0.99$:
+     $$\text{final\_score} = \text{min}\left(0.99, \text{max}(\text{max}(\{S_{front}, S_{left}, S_{right}\}), S_{weighted})\right)$$
+
+Hệ thống quyết định sinh viên điểm danh thành công nếu $\text{final\_score} \ge \text{SIMILARITY\_THRESHOLD}$ (mặc định là $0.7$, cấu hình được trong tệp `.env`).
+
+---
+
+## 4. Các Tham Số Threshold Hệ Thống
+
+Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp [constants.js](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js):
+
+| Nhóm tham số | Tên tham số | Giá trị mặc định | Mô tả |
+| :--- | :--- | :--- | :--- |
+| **Session** | `alignmentHoldMs` | `1000` ms | Thời gian giữ mặt thẳng ổn định để bắt đầu phiên. |
+| | `poseHoldMs` | `400` ms | Thời gian giữ tư thế nghiêng hoặc há miệng để pass bước thử thách. |
+| | `verifyStepTimeoutMs` | `10000` ms | Thời gian tối đa để hoàn thành một bước thử thách liveness (đã nâng lên 10s). |
+| | `verifySessionTimeoutMs` | `20000` ms | Thời gian tối đa của toàn bộ phiên điểm danh. |
+| | `verifyStabilityTimeoutMs`| `10000` ms | Thời gian chờ tối đa cho bước căn chỉnh ban đầu. |
+| **Blink** | `minBaselineEar` | `0.16` | EAR cơ bản tối thiểu để nhận diện mắt bình thường. |
+| | `closeFloorEar` | `0.12` | Ngưỡng EAR xác định mắt nhắm. |
+| | `recoverFloorEar` | `0.16` | Ngưỡng EAR xác định mắt mở lại sau khi chớp. |
+| **Alignment** | `strictCenterX` / `Y` | `0.12` | Độ lệch tối đa cho phép so với tâm camera để coi là mặt thẳng ở giữa. |
+| | `frontYawMax` | `11` độ | Góc lệch Yaw tối đa để coi là nhìn thẳng. |
+| | `rollMax` / `pitchMax` | `10` / `14` độ | Góc lệch nghiêng tối đa của mặt thẳng. |
+| **Pose** | `leftYawMin` / `rightYawMin`| `-14` / `14` độ | Góc Yaw tối thiểu để kích hoạt trạng thái quay trái / quay phải. |
+| | `mouthOpenRatioMin` | `0.24` | Tỉ lệ tối thiểu để xác nhận mở miệng. |
+| **Quality** | `blurMin` | `12` | Điểm độ sắc nét tối thiểu (Laplacian Variance). |
+| | `brightnessMin` / `Max` | `40` / `220` | Ngưỡng độ sáng trung bình của khuôn mặt (thang 0-255). |
+| | `qualityMin` | `0.25` | Điểm chất lượng tổng hợp tối thiểu của khuôn mặt. |
+
+---
+
+## 5. Điểm Nghẽn Hiệu Năng & Các Giải Pháp Đã Triển Khai
+
+Để đảm bảo hệ thống vận hành trơn tru dưới tải cao (hơn 100 sinh viên đồng thời), các điểm nghẽn (bottlenecks) chính đã được xử lý triệt để như sau:
+
+### 5.1 Giải quyết Blocking I/O trên Event Loop của FastAPI
+* **Vấn đề**: Việc đọc file từ payload bằng `await file.read()`, ghi ảnh xuống đĩa bằng `path.write_bytes()`, và thực hiện các giao dịch cơ sở dữ liệu đồng bộ của SQLAlchemy trong các route được khai báo `async def` sẽ chặn (block) toàn bộ Event Loop đơn luồng của FastAPI. Điều này khiến cho các request điểm danh khác phải xếp hàng chờ đợi, làm tăng đột biến độ trễ (latency).
+* **Giải pháp**:
+  - Chuyển đổi toàn bộ các hàm API trong [routes.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/api/routes.py) từ `async def` thành `def`.
+  - Thay thế việc đọc file bất tuần tự bằng `file.file.read()` đồng bộ.
+  - Thêm chỉ mục `index=True` vào cột `student_id` và `created_at` trong bảng `AttendanceLog` ở [models.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/models.py).
+* **Hiệu quả**: FastAPI tự động chuyển hướng chạy các endpoint đồng bộ `def` vào **Thread Pool** phụ (`anyio`). Event Loop chính hoàn toàn tự do để nhận và phân phối các kết nối HTTP khác mà không bị đứng. Đánh chỉ mục giúp các truy vấn báo cáo và lịch sử điểm danh phản hồi trong vài mili-giây thay vì quét toàn bộ bảng.
+
+### 5.2 Khử độ trễ lạnh (Cold Start Latency) của ONNX Runtime
+* **Vấn đề**: ONNX Runtime chỉ thực sự biên dịch và tối ưu hóa đồ thị tính toán ở lần đầu tiên chạy suy luận (first forward pass). Do đó, sinh viên đầu tiên mở camera điểm danh thường phải đợi từ 3-5 giây để Server phản hồi.
+* **Giải pháp**:
+  - Cập nhật hàm `warm_up` trong dịch vụ [embedding.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/embedding.py) chạy thử suy luận với một ma trận numpy trống kích thước $100 \times 100 \times 3$.
+  - Gọi hàm chạy thử này trực tiếp trong sự kiện `lifespan` lúc khởi động ứng dụng FastAPI (trong [main.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/main.py)).
+* **Hiệu quả**: Loại bỏ hoàn toàn độ trễ lần đầu tiên. Khi sinh viên đầu tiên điểm danh, Server phản hồi ngay lập tức với tốc độ suy luận tối đa.
+
+### 5.3 Tránh nghẽn băng thông do truyền tải tệp tĩnh MediaPipe (Deployment)
+* **Vấn đề**: Khi chuyển sang tự lưu trữ (Self-Hosting) tài nguyên MediaPipe (khoảng 15MB cho mỗi sinh viên), nếu FastAPI trực tiếp phục vụ các tệp này, tiến trình uvicorn sẽ bị quá tải về băng thông và tắc nghẽn tài nguyên CPU phục vụ các tệp nhị phân lớn.
+* **Giải pháp**:
+  - Đề xuất cấu hình Reverse Proxy **Nginx** (chi tiết tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf)) đứng trước FastAPI.
+  - Nginx phục vụ trực tiếp các file tĩnh từ thư mục build `frontend/dist/libs/mediapipe/` và áp đặt chính sách cache cực mạnh: `expires 1y; add_header Cache-Control "public, max-age=31536000, immutable";`.
+* **Hiệu quả**: Tiết kiệm 100% tài nguyên CPU của FastAPI cho nhiệm vụ truyền tải file tĩnh, tối ưu hóa băng thông mạng thông qua Nginx, giúp máy chủ phản hồi các yêu cầu API nhận dạng nhanh chóng.

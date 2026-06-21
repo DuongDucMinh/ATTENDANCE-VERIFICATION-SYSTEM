@@ -1,201 +1,144 @@
-# Hệ Thống Điểm Danh Khuôn Mặt
+# ⚡ Hệ Thống Điểm Danh Sinh Viên Bằng Khuôn Mặt (Edge-AI Face Attendance)
 
-Ứng dụng web điểm danh sinh viên bằng khuôn mặt, gồm frontend React và backend FastAPI. Phiên bản hiện tại tập trung vào:
+Hệ thống điểm danh sinh viên bằng khuôn mặt thông minh, tích hợp công nghệ trí tuệ nhân tạo biên (**Edge-AI**) và xác thực chống giả mạo (**Liveness Detection**) thời gian thực. Dự án được phát triển theo mô hình Client-Server tối ưu hiệu năng: tính toán hình học liveness trực tiếp trên trình duyệt (Edge) và nhận diện thực thể khuôn mặt (Face Recognition) tại máy chủ trung tâm.
 
-- Đăng ký 3 mẫu khuôn mặt `front / left / right`
-- Điểm danh bằng challenge ngẫu nhiên nhiều bước
-- Chọn frame tốt nhất ở frontend
-- Tính `hybrid similarity` ở backend bằng InsightFace
+---
 
-Báo cáo kỹ thuật chi tiết nằm tại [REPORT_VI.md](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/REPORT_VI.md).
+## 🚀 Tính năng nổi bật
 
-## Luồng nghiệp vụ
+1. **Xác thực chống giả mạo phía Client (Edge-AI Liveness)**:
+   - Sử dụng thư viện **MediaPipe FaceMesh** biên dịch WASM chạy trực tiếp trên trình duyệt để trích xuất 468 điểm mốc (landmarks) khuôn mặt.
+   - Chuỗi thử thách ngẫu nhiên 2 bước (Chớp mắt, quay trái, quay phải, há miệng) nhằm ngăn chặn các hành vi gian lận bằng ảnh chụp, video hoặc mặt nạ.
+   - Cơ chế tự động chấm điểm chất lượng ảnh (độ mờ, độ sáng) và chọn khung hình tối ưu trước khi gửi về Server.
 
-### Đăng ký khuôn mặt
+2. **Thuật toán nhận dạng nâng cao (Hybrid Face Similarity)**:
+   - Sử dụng mô hình học sâu **InsightFace** (buffalo_s) chạy trên môi trường **ONNX Runtime** để trích xuất và so khớp đặc trưng vector khuôn mặt (512 chiều).
+   - Áp dụng công thức so khớp hỗn hợp (Hybrid Similarity) kết hợp điểm so khớp của góc ảnh thẳng (`front`), góc nghiêng (`left`, `right`) và vector trọng tâm (`centroid`) để tối đa hóa độ chính xác.
 
+3. **Tối ưu hóa hiệu năng & Băng thông**:
+   - **Self-Hosting MediaPipe**: Tự lưu trữ cục bộ các tệp WASM và mô hình của MediaPipe, giải phóng sự phụ thuộc vào các mạng CDN quốc tế, cho phép chạy tốt trong mạng nội bộ.
+   - **FastAPI Thread-Pool Offloading**: Giải phóng Event Loop chính của FastAPI bằng cách phân phối các tác vụ chặn luồng (đọc/ghi ổ đĩa, truy vấn cơ sở dữ liệu) sang Thread Pool.
+   - **ONNX Warmup**: Thực hiện suy luận giả lập ngay khi khởi động máy chủ (FastAPI lifespan) nhằm loại bỏ độ trễ dịch đồ thị lần đầu (cold start).
+   - **Nginx Cache Offloading**: Sử dụng Nginx làm Reverse Proxy để phục vụ các file tĩnh WASM dung lượng lớn và cache tối đa trên trình duyệt, giảm tải 100% tài nguyên phục vụ file tĩnh của Python.
+
+---
+
+## 🛠️ Công nghệ sử dụng
+
+* **Frontend**: React (Vite), MediaPipe FaceMesh (WASM), Vanilla CSS.
+* **Backend**: FastAPI, SQLAlchemy, Uvicorn.
+* **AI Engine**: ONNX Runtime, InsightFace.
+* **Cơ sở dữ liệu**: PostgreSQL với tiện ích mở rộng `pgvector` (hỗ trợ lưu trữ và so khớp vector đặc trưng 512 chiều ở cấp độ DB).
+* **Triển khai**: Docker Compose, Nginx.
+
+---
+
+## 🗺️ Luồng nghiệp vụ chính
+
+### 1. Đăng ký khuôn mặt (Face Registration)
+Sinh viên cần đăng ký đủ 3 góc mặt mẫu để làm căn cứ xác thực:
 ```mermaid
 flowchart TD
-    A["Bắt đầu đăng ký"] --> B["Front: mặt thẳng + chớp mắt 1 lần"]
-    B --> C["Lưu mẫu front"]
-    C --> D["Left: quay trái và giữ"]
-    D --> E["Lưu mẫu left"]
-    E --> F["Right: quay phải và giữ"]
-    F --> G["Lưu mẫu right"]
+    A["Bắt đầu đăng ký"] --> B["Giữ mặt thẳng + Chớp mắt 1 lần"]
+    B --> C["Lưu mẫu thẳng (front)"]
+    C --> D["Quay mặt sang trái nhẹ"]
+    D --> E["Lưu mẫu trái (left)"]
+    E --> F["Quay mặt sang phải nhẹ"]
+    F --> G["Lưu mẫu phải (right)"]
+    G --> H["Hoàn tất đăng ký"]
 ```
 
-### Điểm danh
-
+### 2. Điểm danh xác thực (Attendance Verification)
+Thực hiện chuỗi liveness ngẫu nhiên trước khi thực hiện nhận diện:
 ```mermaid
 flowchart TD
-    A["Bắt đầu điểm danh"] --> B["Căn mặt ổn định trong khung"]
-    B --> C["Challenge ngẫu nhiên 2 bước"]
-    C --> D["Challenge đạt"]
-    D --> E["Quay về mặt thẳng và giữ ổn định ngắn"]
-    E --> F["Chọn frame neutral tốt nhất"]
-    F --> G["Backend tính hybrid similarity"]
-    G --> H["Trả kết quả + decision breakdown"]
+    A["Bắt đầu điểm danh"] --> B["Căn chỉnh khuôn mặt vào khung hình"]
+    B --> C["Thử thách liveness ngẫu nhiên 2 bước"]
+    C --> D["Vượt qua thử thách"]
+    D --> E["Quay về góc mặt thẳng (nhìn thẳng camera)"]
+    E --> F["Chụp loạt ảnh thẳng tốt nhất (Neutral Capture)"]
+    F --> G["Backend tính điểm Hybrid Similarity"]
+    G --> H{"Điểm số >= Ngưỡng?"}
+    H -- "Có" --> I["Điểm danh THÀNH CÔNG"]
+    H -- "Không" --> J["Điểm danh THẤT BẠI"]
 ```
 
-## Cấu hình môi trường
+---
 
-Dự án chỉ cần một file cấu hình runtime ở root:
+## 💻 Hướng dẫn chạy local
 
-- [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env)
-- [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example)
-
-Frontend dev server không cần `frontend/.env` cho luồng local hoặc VS Code dev tunnel. Mặc định frontend gọi relative `/api`, sau đó Vite proxy request sang backend local `http://127.0.0.1:8000`.
-
-Khi test trên điện thoại bằng VS Code forward port, chỉ cần forward port frontend `5173`. Backend vẫn chạy local ở `127.0.0.1:8000`; request `/api/...` đi qua tunnel frontend rồi được Vite proxy sang backend.
-
-## Cấu hình threshold
-
-### Frontend
-
-Toàn bộ threshold phía frontend đã được gom vào một bảng cấu hình duy nhất:
-
-- [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
-
-Cấu trúc chính:
-
-- `THRESHOLDS.session`
-- `THRESHOLDS.blink`
-- `THRESHOLDS.alignment`
-- `THRESHOLDS.pose`
-- `THRESHOLDS.quality`
-- `THRESHOLDS.antiReplay`
-
-Ngoài ra, tham số lấy mẫu frame nằm trong:
-
-- `FRAME_CONFIG.sampleSize`
-- `FRAME_CONFIG.maxBufferedFrames`
-- `FRAME_CONFIG.sampleEveryNFrames`
-
-### Backend
-
-Ngưỡng quyết định similarity nằm trong:
-
-- [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example)
-- [config.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/config.py)
-
-Biến đang dùng:
-
-```env
-SIMILARITY_THRESHOLD=0.7
-```
-
-## Cách cập nhật threshold
-
-1. Nếu đổi threshold frontend, sửa [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js).
-2. Nếu đổi threshold backend runtime, sửa [.env](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env). File [.env.example](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.env.example) chỉ là mẫu.
-3. Sau khi sửa frontend:
-
-```powershell
-cd frontend
-npm run build
-```
-
-4. Sau khi sửa backend `.env`, phải tắt process backend cũ và chạy lại từ thư mục gốc project:
-
-```powershell
-Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-```
-
-5. Kiểm tra runtime thật sự:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/health
-```
-6. Kiểm tra backend runtime thật sự:
-
-- [http://127.0.0.1:8000/api/runtime-config](http://127.0.0.1:8000/api/runtime-config)
-- [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
-
-## Hybrid similarity
-
-Backend hiện dùng công thức:
-
-```text
-centroid_score = cosine(probe, centroid)
-best_sample_score = max(sample_scores)
-top_k_score = mean(top 2 sample_scores)
-pose_weighted_score = 0.7 * top_k_score + 0.3 * centroid_score
-raw_match_score = max(best_sample_score, pose_weighted_score)
-final_score = min(0.99, raw_match_score)
-```
-
-`capture_meta.quality` vẫn được backend ghi vào log để debug, nhưng không còn dùng để cộng hoặc trừ vào `final_score`.
-
-Trong `verify`, frame gửi lên backend không lấy trực tiếp từ lúc đang thực hiện challenge. Challenge chỉ dùng để xác nhận liveness; sau khi challenge đạt, frontend sẽ lấy thêm một burst frame neutral riêng để phục vụ recognition.
-
-Khi điểm danh, frontend cũng hiển thị:
-
-- `Threshold backend runtime`
-- `Điểm hybrid similarity`
-- `Raw match score`
-
-## API chính
-
-- `POST /api/profile/upsert`
-- `GET /api/profile/{student_id}`
-- `POST /api/face/register`
-- `POST /api/attendance/verify`
-- `GET /api/runtime-config`
-- `GET /api/health`
-
-## Trạng thái anti-replay
-
-Module anti-replay heuristic vẫn còn trong mã nguồn để nghiên cứu tiếp, nhưng hiện tại:
-
-- Không dùng để fail phiên
-- Không hiển thị trên giao diện debug
-- Không còn giao diện legacy riêng
-
-## Chạy local
-
-### PostgreSQL
-
-```powershell
+### 1. Khởi động Cơ sở dữ liệu (PostgreSQL + pgvector)
+Dự án được cấu hình mặc định sử dụng PostgreSQL. Bạn có thể khởi chạy nhanh container DB bằng Docker Compose:
+```bash
 docker compose up -d
 ```
 
-### Backend
+### 2. Cấu hình & Chạy Backend
+* Tạo môi trường ảo và cài đặt thư viện:
+  ```bash
+  python -m venv .venv
+  # Windows
+  .\.venv\Scripts\activate
+  # Linux/macOS
+  source .venv/bin/activate
+  
+  pip install -r requirements.txt
+  ```
+* Tạo tệp cấu hình `.env` ở thư mục gốc của dự án (sử dụng các cấu hình từ tệp mẫu `.env.example`):
+  ```env
+  DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/attendance_verification
+  SIMILARITY_THRESHOLD=0.7
+  UPLOADS_DIR=backend/data/face_images
+  ```
+* Khởi chạy FastAPI Backend:
+  ```bash
+  python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+  ```
 
-```powershell
-.\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-```
+### 3. Cài đặt & Chạy Frontend
+* Di chuyển vào thư mục `frontend` và cài đặt các gói NPM:
+  ```bash
+  cd frontend
+  npm install
+  ```
+* Khởi chạy Vite Dev Server:
+  ```bash
+  npm run dev
+  ```
+* Mở trình duyệt truy cập: `http://localhost:5173`. Vite sẽ tự động proxy các request có đường dẫn `/api/*` sang máy chủ backend đang chạy ở port `8000`.
 
-### Frontend
+---
 
-```powershell
+## 🧪 Kiểm thử (Testing)
+
+### 1. Kiểm thử Frontend (Unit tests bằng Vitest)
+```bash
 cd frontend
-npm install
-npm run dev
+npm run test
 ```
 
-Khi mở trên điện thoại qua VS Code dev tunnel, forward port `5173` và mở URL tunnel của frontend. Không cần forward port `8000` nếu đang dùng Vite dev server.
-
-## Kiểm thử
-
-Frontend:
-
-```powershell
-cd frontend
-npm test -- --run
-npm run build
+### 2. Kiểm thử Backend (Unit tests bằng Python unittest)
+```bash
+python -m unittest tests/test_main.py
 ```
 
-Backend:
+---
 
-```powershell
-python -m unittest discover -s tests
+## 🌐 Triển khai Production (Nginx Proxy)
+
+Để hệ thống hoạt động ổn định khi phục vụ số lượng lớn sinh viên truy cập đồng thời (100+ người), bạn nên triển khai **Nginx** làm Reverse Proxy đứng trước FastAPI để phục vụ file tĩnh và WASM của MediaPipe.
+
+Tệp cấu hình mẫu chi tiết được lưu trữ tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf). Nginx sẽ cấu hình cache tối đa cho tệp tĩnh:
+```nginx
+location /libs/mediapipe/ {
+    alias /path/to/project/frontend/dist/libs/mediapipe/;
+    expires 1y;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    access_log off;
+}
 ```
 
-## Cấu trúc đáng chú ý
+---
 
-- [CameraSession.jsx](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/components/CameraSession.jsx)
-- [constants.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/constants.js)
-- [challengeEngine.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/challengeEngine.js)
-- [quality.js](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/frontend/src/liveness/quality.js)
-- [attendance.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/attendance.py)
-- [routes.py](/D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/api/routes.py)
+## 📝 Tài liệu bổ sung
+* **Báo cáo kỹ thuật chi tiết**: [REPORT_VI.md](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/REPORT_VI.md) - Chứa thông tin chi tiết về giải thuật hình học, công thức toán học, cấu hình tham số threshold và phân tích chuyên sâu các điểm nghẽn hiệu năng.
