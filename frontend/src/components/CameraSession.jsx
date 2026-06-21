@@ -105,6 +105,13 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     quality: null,
   });
   const [blockingMessage, setBlockingMessage] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
+  const showDebugRef = useRef(false);
+  const lastDebugUpdateRef = useRef(0);
+
+  useEffect(() => {
+    showDebugRef.current = showDebug;
+  }, [showDebug]);
 
   useEffect(() => {
     if (!active || !studentId.trim()) return undefined;
@@ -224,6 +231,11 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     };
 
     const updateDebug = ({ phase, currentStepType, currentStepPrompt, alignment, ear, mouthOpenRatio, blinkDetected, quality }) => {
+      if (!showDebugRef.current) return;
+      const now = performance.now();
+      if (now - lastDebugUpdateRef.current < 200) return;
+      lastDebugUpdateRef.current = now;
+
       setDebugState({
         phase,
         currentStepType,
@@ -800,70 +812,89 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
   return (
     <section className="camera-surface">
+      <div className="camera-header">
+        <h3>{mode === "register" ? "Đăng ký khuôn mặt" : "Xác nhận điểm danh"}</h3>
+        <button type="button" className="close-btn" onClick={onStop} aria-label="Đóng camera">✕</button>
+      </div>
+
       <div className="camera-layout">
-        <div className="debug-panel">
-          <strong>Debug realtime</strong>
-          {renderDebugRow("Pha", debugState.phase)}
-          {renderDebugRow("Buoc", debugState.currentStepPrompt || "--")}
-          {renderDebugRow("Can giua", alignmentStatus ? "Dat" : "Chua dat", alignmentStatus ? "pass" : "fail")}
-          {renderDebugRow("Kich thuoc", debugState.sizeCheck ? "Dat" : "Chua dat", debugState.sizeCheck ? "pass" : "fail")}
-          {renderDebugRow(
-            "Pose",
-            `yaw=${debugState.pose?.yawAngle ?? "--"} pitch=${debugState.pose?.pitchAngle ?? "--"} roll=${debugState.pose?.rollAngle ?? "--"}`,
-          )}
-          {renderDebugRow(
-            "EAR / Blink",
-            `${debugState.ear ?? "--"} | ${debugState.blinkDetected ? "DETECTED" : "NO"}`,
-            debugState.blinkDetected ? "pass" : "neutral",
-          )}
-          {debugState.currentStepType === "open_mouth"
-            ? renderDebugRow(
-                "Mouth open",
-                `${debugState.mouthOpenRatio ?? "--"} / ${THRESHOLDS.pose.mouthOpenRatioMin}`,
-                debugState.mouthOpenRatio != null
-                  ? debugState.mouthOpenRatio >= THRESHOLDS.pose.mouthOpenRatioMin
-                    ? "pass"
-                    : "fail"
-                  : "neutral",
-              )
-            : null}
-          {renderDebugRow(
-            "Do net",
-            `${debugState.quality?.blurScore ?? "--"} / ${THRESHOLDS.quality.blurMin}`,
-            debugState.quality ? (debugState.quality.blurScore >= THRESHOLDS.quality.blurMin ? "pass" : "fail") : "neutral",
-          )}
-          {renderDebugRow(
-            "Do sang",
-            `${debugState.quality?.brightnessMean ?? "--"} / [${THRESHOLDS.quality.brightnessMin}, ${THRESHOLDS.quality.brightnessMax}]`,
-            debugState.quality
-              ? debugState.quality.brightnessMean >= THRESHOLDS.quality.brightnessMin &&
-                debugState.quality.brightnessMean <= THRESHOLDS.quality.brightnessMax
-                ? "pass"
-                : "fail"
-              : "neutral",
-          )}
-          {renderDebugRow(
-            "Quality",
-            `${debugState.quality?.qualityScore ?? "--"} / ${THRESHOLDS.quality.qualityMin}`,
-            debugState.quality ? (debugState.quality.qualityScore >= THRESHOLDS.quality.qualityMin ? "pass" : "fail") : "neutral",
-          )}
-        </div>
         <div ref={viewportRef} className="viewport">
           <video ref={videoRef} autoPlay playsInline muted />
           <canvas ref={overlayRef} />
           <div className={`oval-guide ${telemetry.tone === "success" ? "ready" : telemetry.tone === "error" ? "error" : "tracking"}`} />
-          <div className="telemetry">
-            <span>Trang thai: {telemetry.status}</span>
-            <span>{telemetry.hint}</span>
+          
+          <div className={`hud-card ${telemetry.tone}`}>
+            <div className="hud-eyebrow">{telemetry.status}</div>
+            <div className="hud-instruction">{telemetry.hint}</div>
           </div>
+
           {blockingMessage ? (
             <div className="blocking-overlay" role="status" aria-live="polite">
               <div className="spinner" />
               <strong>{blockingMessage}</strong>
-              <span>Vui long giu nguyen trang cho toi khi co ket qua.</span>
+              <span>Vui lòng giữ nguyên trang cho tới khi có kết quả.</span>
             </div>
           ) : null}
         </div>
+
+        <div className="camera-controls">
+          <button type="button" className="ghost-btn cancel-btn" onClick={onStop}>
+            Hủy bỏ
+          </button>
+          <button type="button" className="ghost-btn debug-toggle-btn" onClick={() => setShowDebug(!showDebug)}>
+            {showDebug ? "Ẩn debug" : "Hiện debug"}
+          </button>
+        </div>
+
+        {showDebug && (
+          <div className="debug-panel">
+            <strong>Debug realtime</strong>
+            {renderDebugRow("Pha", debugState.phase)}
+            {renderDebugRow("Buoc", debugState.currentStepPrompt || "--")}
+            {renderDebugRow("Can giua", alignmentStatus ? "Dat" : "Chua dat", alignmentStatus ? "pass" : "fail")}
+            {renderDebugRow("Kich thuoc", debugState.sizeCheck ? "Dat" : "Chua dat", debugState.sizeCheck ? "pass" : "fail")}
+            {renderDebugRow(
+              "Pose",
+              `yaw=${debugState.pose?.yawAngle ?? "--"} pitch=${debugState.pose?.pitchAngle ?? "--"} roll=${debugState.pose?.rollAngle ?? "--"}`,
+            )}
+            {renderDebugRow(
+              "EAR / Blink",
+              `${debugState.ear ?? "--"} | ${debugState.blinkDetected ? "DETECTED" : "NO"}`,
+              debugState.blinkDetected ? "pass" : "neutral",
+            )}
+            {debugState.currentStepType === "open_mouth"
+              ? renderDebugRow(
+                  "Mouth open",
+                  `${debugState.mouthOpenRatio ?? "--"} / ${THRESHOLDS.pose.mouthOpenRatioMin}`,
+                  debugState.mouthOpenRatio != null
+                    ? debugState.mouthOpenRatio >= THRESHOLDS.pose.mouthOpenRatioMin
+                      ? "pass"
+                      : "fail"
+                    : "neutral",
+                )
+              : null}
+            {renderDebugRow(
+              "Do net",
+              `${debugState.quality?.blurScore ?? "--"} / ${THRESHOLDS.quality.blurMin}`,
+              debugState.quality ? (debugState.quality.blurScore >= THRESHOLDS.quality.blurMin ? "pass" : "fail") : "neutral",
+            )}
+            {renderDebugRow(
+              "Do sang",
+              `${debugState.quality?.brightnessMean ?? "--"} / [${THRESHOLDS.quality.brightnessMin}, ${THRESHOLDS.quality.brightnessMax}]`,
+              debugState.quality
+                ? debugState.quality.brightnessMean >= THRESHOLDS.quality.brightnessMin &&
+                  debugState.quality.brightnessMean <= THRESHOLDS.quality.brightnessMax
+                  ? "pass"
+                  : "fail"
+                : "neutral",
+            )}
+            {renderDebugRow(
+              "Quality",
+              `${debugState.quality?.qualityScore ?? "--"} / ${THRESHOLDS.quality.qualityMin}`,
+              debugState.quality ? (debugState.quality.qualityScore >= THRESHOLDS.quality.qualityMin ? "pass" : "fail") : "neutral",
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

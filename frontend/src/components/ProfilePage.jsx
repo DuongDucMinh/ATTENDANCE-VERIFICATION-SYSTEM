@@ -48,6 +48,27 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
   };
 
   if (screen === "register") {
+    if (activeSession) {
+      return (
+        <CameraSession
+          mode="register"
+          studentId={form.student_id}
+          active={activeSession}
+          onStop={() => setActiveSession(false)}
+          onComplete={async (result) => {
+            setRegistrationResult(result);
+            setActiveSession(false);
+            try {
+              const refreshed = await fetchProfile(form.student_id);
+              setProfile(refreshed);
+            } catch {
+              // Keep previous profile if refresh fails.
+            }
+          }}
+        />
+      );
+    }
+
     return (
       <div className="page-grid single">
         <section className="panel register-workspace">
@@ -72,25 +93,7 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
             </div>
           </div>
 
-          {activeSession ? (
-            <CameraSession
-              mode="register"
-              studentId={form.student_id}
-              active={activeSession}
-              onStop={() => setActiveSession(false)}
-              onComplete={async (result) => {
-                setRegistrationResult(result);
-                setActiveSession(false);
-                try {
-                  const refreshed = await fetchProfile(form.student_id);
-                  setProfile(refreshed);
-                } catch {
-                  // Keep previous profile if refresh fails.
-                }
-              }}
-            />
-          ) : (
-            <div className="result-shell">
+          <div className="result-shell">
               {registrationResult ? (
                 <article className={`result-card ${registrationResult.ok ? "success" : "error"}`}>
                   <h3>{registrationResult.ok ? "Đăng ký thành công" : "Đăng ký thất bại"}</h3>
@@ -125,7 +128,6 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
                 </button>
               </div>
             </div>
-          )}
         </section>
       </div>
     );
