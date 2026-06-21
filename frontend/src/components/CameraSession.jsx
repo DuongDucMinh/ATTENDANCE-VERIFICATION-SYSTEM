@@ -108,10 +108,129 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
   const [showDebug, setShowDebug] = useState(false);
   const showDebugRef = useRef(false);
   const lastDebugUpdateRef = useRef(0);
+  const lastPlayedRef = useRef({ name: "", timestamp: 0 });
+  const audioCacheRef = useRef({});
 
   useEffect(() => {
     showDebugRef.current = showDebug;
   }, [showDebug]);
+
+  const playAudio = (name, minIntervalMs = 2000) => {
+    try {
+      const now = performance.now();
+      const last = lastPlayedRef.current;
+
+      if (last.name === name && now - last.timestamp < minIntervalMs) {
+        return;
+      }
+
+      if (window.currentPlayingAudio) {
+        window.currentPlayingAudio.pause();
+        window.currentPlayingAudio.currentTime = 0;
+      }
+
+      let audio = audioCacheRef.current[name];
+      if (!audio) {
+        audio = new Audio(`/audio/${name}.mp3`);
+        audioCacheRef.current[name] = audio;
+      }
+
+      window.currentPlayingAudio = audio;
+      audio.play().catch((err) => {
+        console.warn("Audio autoplay blocked by browser or failed:", err);
+      });
+      lastPlayedRef.current = { name, timestamp: now };
+    } catch (e) {
+      console.error("Failed to play audio:", e);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (window.currentPlayingAudio) {
+        window.currentPlayingAudio.pause();
+        window.currentPlayingAudio.currentTime = 0;
+        window.currentPlayingAudio = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!telemetry.hint) return;
+    const text = telemetry.hint.toLowerCase();
+
+    let audioFile = null;
+
+    if (text.includes("quay sang trái theo yêu cầu") || text.includes("quay sang trai theo yeu cau")) {
+      audioFile = "turn_left";
+    } else if (text.includes("quay sang phải theo yêu cầu") || text.includes("quay sang phai theo yeu cau")) {
+      audioFile = "turn_right";
+    } else if (
+      text.includes("không thấy khuôn mặt") ||
+      text.includes("khong thay khuon mat") ||
+      text.includes("đưa mặt vào") ||
+      text.includes("dua mat vao")
+    ) {
+      audioFile = "align";
+    } else if (
+      text.includes("vùng trung tâm") ||
+      text.includes("giữa khung") ||
+      text.includes("vao giua")
+    ) {
+      audioFile = "center";
+    } else if (text.includes("sát hơn") || text.includes("sat hon")) {
+      audioFile = "closer";
+    } else if (text.includes("lùi nhẹ") || text.includes("lui nhe")) {
+      audioFile = "further";
+    } else if (text.includes("chớp mắt 1 lần") || text.includes("chop mat 1 lan") || text.includes("blink_once")) {
+      audioFile = "blink_once";
+    } else if (text.includes("chớp mắt 2 lần") || text.includes("chop mat 2 lan") || text.includes("blink_twice")) {
+      audioFile = "blink_twice";
+    } else if (
+      text.includes("quay mặt sang trái") ||
+      text.includes("quay sang trai") ||
+      text.includes("xoay đầu sang trái") ||
+      text.includes("xoay sang trai")
+    ) {
+      audioFile = "turn_left";
+    } else if (
+      text.includes("quay mặt sang phải") ||
+      text.includes("quay sang phai") ||
+      text.includes("xoay đầu sang phải") ||
+      text.includes("xoay sang phai")
+    ) {
+      audioFile = "turn_right";
+    } else if (text.includes("há miệng") || text.includes("mo mieng") || text.includes("mở miệng")) {
+      audioFile = "open_mouth";
+    } else if (
+      text.includes("nhìn thẳng") ||
+      text.includes("quay ve mat thang") ||
+      text.includes("mat thang")
+    ) {
+      audioFile = "neutral";
+    }
+
+    if (audioFile) {
+      playAudio(audioFile);
+    }
+  }, [telemetry.hint]);
+
+  useEffect(() => {
+    if (
+      telemetry.status === "Success" ||
+      telemetry.status === "Registered" ||
+      telemetry.hint?.includes("thành công") ||
+      telemetry.hint?.includes("thanh cong")
+    ) {
+      playAudio("success", 0);
+    } else if (
+      telemetry.status === "Failed" ||
+      telemetry.hint?.includes("thất bại") ||
+      telemetry.hint?.includes("that bai")
+    ) {
+      playAudio("fail", 0);
+    }
+  }, [telemetry.status]);
 
   useEffect(() => {
     if (!active || !studentId.trim()) return undefined;
