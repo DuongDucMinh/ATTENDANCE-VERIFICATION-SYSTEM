@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import CameraSession from "./CameraSession";
+import CameraSession, { unlockAndPreloadAudio } from "./CameraSession";
 import { fetchProfile, upsertProfile } from "../lib/api";
 
 const defaultProfile = {
@@ -113,6 +113,7 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
                   className="primary-btn"
                   type="button"
                   onClick={() => {
+                    unlockAndPreloadAudio();
                     setRegistrationResult(null);
                     setActiveSession(true);
                   }}
@@ -173,7 +174,7 @@ export default function ProfilePage({ profile, setProfile, registrationResult, s
               <h3>{registrationResult.ok ? "Đăng ký thành công" : "Đăng ký thất bại"}</h3>
               <p>Mã sinh viên: {registrationResult.studentId}</p>
               <p>Thời gian: {new Date(registrationResult.createdAt).toLocaleString("vi-VN")}</p>
-              {registrationResult.ok ? <p>Đã ghi nhận bộ mẫu `front`, `left`, `right` cho backend hybrid scoring.</p> : null}
+              {registrationResult.ok ? <p>Đã có 3 mẫu pose (front, left, right)</p> : null}
               {registrationResult.reason ? <p>Lý do: {registrationResult.reason}</p> : null}
             </article>
           ) : (

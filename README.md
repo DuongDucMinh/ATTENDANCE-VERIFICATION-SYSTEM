@@ -15,7 +15,11 @@ Hệ thống điểm danh sinh viên bằng khuôn mặt thông minh, tích hợ
    - Sử dụng mô hình học sâu **InsightFace** (buffalo_s) chạy trên môi trường **ONNX Runtime** để trích xuất và so khớp đặc trưng vector khuôn mặt (512 chiều).
    - Áp dụng công thức so khớp hỗn hợp (Hybrid Similarity) kết hợp điểm so khớp của góc ảnh thẳng (`front`), góc nghiêng (`left`, `right`) và vector trọng tâm (`centroid`) để tối đa hóa độ chính xác.
 
-3. **Tối ưu hóa hiệu năng & Băng thông**:
+3. **Trải nghiệm UX/UI và Tương thích Di động (Mobile Audio Autoplay)**:
+   - Giao diện và giọng nói điều hướng 100% Tiếng Việt có dấu, giúp sinh viên dễ dàng làm theo các thao tác.
+   - Xử lý thông minh chính sách bảo mật Audio Autoplay của iOS/Android bằng kỹ thuật Unlock Audio qua tương tác người dùng (`unlockAndPreloadAudio`), đảm bảo âm thanh phát mượt mà, không bị chồng chéo.
+
+4. **Tối ưu hóa hiệu năng & Băng thông**:
    - **Self-Hosting MediaPipe**: Tự lưu trữ cục bộ các tệp WASM và mô hình của MediaPipe, giải phóng sự phụ thuộc vào các mạng CDN quốc tế, cho phép chạy tốt trong mạng nội bộ.
    - **FastAPI Thread-Pool Offloading**: Giải phóng Event Loop chính của FastAPI bằng cách phân phối các tác vụ chặn luồng (đọc/ghi ổ đĩa, truy vấn cơ sở dữ liệu) sang Thread Pool.
    - **ONNX Warmup**: Thực hiện suy luận giả lập ngay khi khởi động máy chủ (FastAPI lifespan) nhằm loại bỏ độ trễ dịch đồ thị lần đầu (cold start).

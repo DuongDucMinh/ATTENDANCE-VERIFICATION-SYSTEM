@@ -130,3 +130,11 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
   - Đề xuất cấu hình Reverse Proxy **Nginx** (chi tiết tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf)) đứng trước FastAPI.
   - Nginx phục vụ trực tiếp các file tĩnh từ thư mục build `frontend/dist/libs/mediapipe/` và áp đặt chính sách cache cực mạnh: `expires 1y; add_header Cache-Control "public, max-age=31536000, immutable";`.
 * **Hiệu quả**: Tiết kiệm 100% tài nguyên CPU của FastAPI cho nhiệm vụ truyền tải file tĩnh, tối ưu hóa băng thông mạng thông qua Nginx, giúp máy chủ phản hồi các yêu cầu API nhận dạng nhanh chóng.
+
+### 5.4 Khắc phục chính sách Autoplay Audio trên trình duyệt di động
+* **Vấn đề**: Các trình duyệt trên thiết bị di động (đặc biệt là iOS Safari và Chrome Android) áp dụng chính sách bảo mật nghiêm ngặt chặn tự động phát âm thanh (Audio Autoplay) nếu không xuất phát trực tiếp từ tương tác người dùng. Điều này khiến các thông báo âm thanh (ví dụ "Hãy quay sang trái", "Đưa mặt vào giữa khung hình") thỉnh thoảng không phát, hoặc phát chồng chéo lên nhau khi mạng chậm.
+* **Giải pháp**:
+  - Triển khai bộ nhớ đệm âm thanh toàn cục (`globalAudioCache`) để lưu giữ các đối tượng `HTMLAudioElement`.
+  - Xây dựng cơ chế `unlockAndPreloadAudio`: Khi sinh viên vừa nhấn nút "Bắt Đầu", hệ thống lập tức lặp qua toàn bộ file âm thanh, thiết lập `volume = 0` và gọi `.play()` rồi `.pause()`. Thao tác này "mở khóa" quyền phát âm thanh cho các phần tử này trong toàn bộ phiên làm việc.
+  - Áp dụng logic dừng toàn bộ âm thanh cũ trước khi phát âm thanh mới để tránh chồng chéo.
+* **Hiệu quả**: Đảm bảo 100% âm thanh điều hướng được phát mượt mà, đồng bộ và rõ ràng trên mọi thiết bị di động cũng như máy tính để bàn.

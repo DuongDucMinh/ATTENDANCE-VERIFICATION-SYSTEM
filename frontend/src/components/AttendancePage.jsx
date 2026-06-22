@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import CameraSession from "./CameraSession";
+import CameraSession, { unlockAndPreloadAudio } from "./CameraSession";
 import { fetchRuntimeConfig } from "../lib/api";
 
 export default function AttendancePage({ defaultStudentId }) {
@@ -45,7 +45,6 @@ export default function AttendancePage({ defaultStudentId }) {
       <section className="panel">
         <div className="panel-heading">
           <h2>Điểm danh</h2>
-          <p>Hệ thống sẽ tạo challenge ngẫu nhiên 2 bước để xác thực liveness, sau đó chụp ảnh khuôn mặt trung tính để xác thực danh tính sinh viên.</p>
           {typeof runtimeConfig?.similarity_threshold === "number" ? (
             <p style={{ marginTop: '8px', fontSize: '0.85rem' }}>
               Ngưỡng similarity tối thiểu: <strong>{runtimeConfig.similarity_threshold.toFixed(3)}</strong>
@@ -81,6 +80,7 @@ export default function AttendancePage({ defaultStudentId }) {
             type="button"
             disabled={!studentId.trim()}
             onClick={() => {
+              unlockAndPreloadAudio();
               setResult(null);
               setActiveSession(true);
             }}
