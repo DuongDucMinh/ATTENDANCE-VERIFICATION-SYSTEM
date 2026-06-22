@@ -20,10 +20,10 @@ Hệ thống điểm danh sinh viên bằng khuôn mặt thông minh, tích hợ
    - Xử lý thông minh chính sách bảo mật Audio Autoplay của iOS/Android bằng kỹ thuật Unlock Audio qua tương tác người dùng (`unlockAndPreloadAudio`), đảm bảo âm thanh phát mượt mà, không bị chồng chéo.
 
 4. **Tối ưu hóa hiệu năng & Băng thông**:
-   - **Self-Hosting MediaPipe**: Tự lưu trữ cục bộ các tệp WASM và mô hình của MediaPipe, giải phóng sự phụ thuộc vào các mạng CDN quốc tế, cho phép chạy tốt trong mạng nội bộ.
+   - **Tải trước tài nguyên (Preload & Warmup)**: Khởi tạo sớm (warm up) đối tượng MediaPipe FaceMesh ngầm thông qua CDN ngay khi tải trang, giúp xóa bỏ hoàn toàn độ trễ 3-5 giây chờ tải mô hình khi người dùng mở camera điểm danh.
    - **FastAPI Thread-Pool Offloading**: Giải phóng Event Loop chính của FastAPI bằng cách phân phối các tác vụ chặn luồng (đọc/ghi ổ đĩa, truy vấn cơ sở dữ liệu) sang Thread Pool.
    - **ONNX Warmup**: Thực hiện suy luận giả lập ngay khi khởi động máy chủ (FastAPI lifespan) nhằm loại bỏ độ trễ dịch đồ thị lần đầu (cold start).
-   - **Nginx Cache Offloading**: Sử dụng Nginx làm Reverse Proxy để phục vụ các file tĩnh WASM dung lượng lớn và cache tối đa trên trình duyệt, giảm tải 100% tài nguyên phục vụ file tĩnh của Python.
+   - **Nginx Cache Offloading**: Sử dụng Nginx làm Reverse Proxy để phục vụ và cache tối đa các tệp âm thanh tĩnh của Frontend, giảm tải hoàn toàn cho backend Python.
 
 ---
 
@@ -130,14 +130,14 @@ python -m unittest tests/test_main.py
 
 ## 🌐 Triển khai Production (Nginx Proxy)
 
-Để hệ thống hoạt động ổn định khi phục vụ số lượng lớn sinh viên truy cập đồng thời (100+ người), bạn nên triển khai **Nginx** làm Reverse Proxy đứng trước FastAPI để phục vụ file tĩnh và WASM của MediaPipe.
+Để hệ thống hoạt động ổn định khi phục vụ số lượng lớn sinh viên truy cập đồng thời (100+ người), bạn nên triển khai **Nginx** làm Reverse Proxy đứng trước FastAPI để phục vụ tài nguyên tĩnh (như các file âm thanh Tiếng Việt).
 
 Tệp cấu hình mẫu chi tiết được lưu trữ tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf). Nginx sẽ cấu hình cache tối đa cho tệp tĩnh:
 ```nginx
-location /libs/mediapipe/ {
-    alias /path/to/project/frontend/dist/libs/mediapipe/;
-    expires 1y;
-    add_header Cache-Control "public, max-age=31536000, immutable";
+location /audio/ {
+    alias /path/to/project/frontend/public/audio/;
+    expires 30d;
+    add_header Cache-Control "public, max-age=2592000, immutable";
     access_log off;
 }
 ```

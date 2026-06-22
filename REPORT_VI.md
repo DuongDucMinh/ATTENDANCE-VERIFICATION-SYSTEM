@@ -124,12 +124,12 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
   - Gọi hàm chạy thử này trực tiếp trong sự kiện `lifespan` lúc khởi động ứng dụng FastAPI (trong [main.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/main.py)).
 * **Hiệu quả**: Loại bỏ hoàn toàn độ trễ lần đầu tiên. Khi sinh viên đầu tiên điểm danh, Server phản hồi ngay lập tức với tốc độ suy luận tối đa.
 
-### 5.3 Tránh nghẽn băng thông do truyền tải tệp tĩnh MediaPipe (Deployment)
-* **Vấn đề**: Khi chuyển sang tự lưu trữ (Self-Hosting) tài nguyên MediaPipe (khoảng 15MB cho mỗi sinh viên), nếu FastAPI trực tiếp phục vụ các tệp này, tiến trình uvicorn sẽ bị quá tải về băng thông và tắc nghẽn tài nguyên CPU phục vụ các tệp nhị phân lớn.
+### 5.3 Tối ưu hóa tải tài nguyên Frontend (Preload & Cache)
+* **Vấn đề**: Việc chờ tải mô hình FaceMesh khi người dùng nhấn "Bắt đầu" có thể gây ra độ trễ 3-5 giây (lag), ảnh hưởng đến trải nghiệm người dùng. Đồng thời, việc FastAPI phải phục vụ các tài nguyên tĩnh như âm thanh sẽ gây lãng phí tài nguyên CPU backend.
 * **Giải pháp**:
-  - Đề xuất cấu hình Reverse Proxy **Nginx** (chi tiết tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf)) đứng trước FastAPI.
-  - Nginx phục vụ trực tiếp các file tĩnh từ thư mục build `frontend/dist/libs/mediapipe/` và áp đặt chính sách cache cực mạnh: `expires 1y; add_header Cache-Control "public, max-age=31536000, immutable";`.
-* **Hiệu quả**: Tiết kiệm 100% tài nguyên CPU của FastAPI cho nhiệm vụ truyền tải file tĩnh, tối ưu hóa băng thông mạng thông qua Nginx, giúp máy chủ phản hồi các yêu cầu API nhận dạng nhanh chóng.
+  - **Preload MediaPipe (CDN)**: Triển khai hàm `preloadFaceMesh` chạy ngầm để tải mô hình trực tiếp từ CDN (JSDelivr) ngay khi người dùng truy cập trang, loại bỏ độ trễ khi khởi động camera.
+  - **Nginx Cache Offloading**: Cấu hình **Nginx** (chi tiết tại [nginx.conf](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/nginx.conf)) làm Reverse Proxy để phục vụ trực tiếp thư mục `/audio/` của Frontend với chính sách cache lâu dài (`expires 30d; add_header Cache-Control "public, max-age=2592000, immutable";`).
+* **Hiệu quả**: Loại bỏ hoàn toàn độ trễ khởi động camera trên Client, tiết kiệm 100% tài nguyên CPU của FastAPI cho nhiệm vụ truyền tải file tĩnh, tối ưu hóa băng thông mạng.
 
 ### 5.4 Khắc phục chính sách Autoplay Audio trên trình duyệt di động
 * **Vấn đề**: Các trình duyệt trên thiết bị di động (đặc biệt là iOS Safari và Chrome Android) áp dụng chính sách bảo mật nghiêm ngặt chặn tự động phát âm thanh (Audio Autoplay) nếu không xuất phát trực tiếp từ tương tác người dùng. Điều này khiến các thông báo âm thanh (ví dụ "Hãy quay sang trái", "Đưa mặt vào giữa khung hình") thỉnh thoảng không phát, hoặc phát chồng chéo lên nhau khi mạng chậm.
