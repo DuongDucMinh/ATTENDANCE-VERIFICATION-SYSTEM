@@ -261,33 +261,35 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     };
   }, []);
 
+  const determineAudioFile = (text) => {
+    if (text.includes("chớp mắt 2 lần")) return "blink_twice";
+    if (text.includes("chớp mắt 1 lần")) return "blink_once";
+
+    // Wrong-turn instructions have high priority to avoid matching wrong parts
+    if (text.includes("hãy quay sang trái")) return "turn_left";
+    if (text.includes("hãy quay sang phải")) return "turn_right";
+
+    // General turn instructions
+    if (text.includes("quay mặt sang trái") || text.includes("quay sang trái")) return "turn_left";
+    if (text.includes("quay mặt sang phải") || text.includes("quay sang phải")) return "turn_right";
+
+    if (text.includes("há miệng")) return "open_mouth";
+
+    if (text.includes("mắt thẳng") || text.includes("về thẳng")) return "neutral";
+    if (text.includes("đầu thẳng") || text.includes("ngậm miệng")) return "neutral";
+
+    if (text.includes("không thấy khuôn mặt")) return "align";
+    if (text.includes("đưa mặt vào giữa khung") || text.includes("trung tâm")) return "center";
+    if (text.includes("sát hơn")) return "closer";
+    if (text.includes("lùi nhẹ")) return "further";
+
+    return null;
+  };
+
   useEffect(() => {
     if (!telemetry.hint) return;
     const text = telemetry.hint.toLowerCase();
-
-    let audioFile = null;
-
-    if (text.includes("quay sang trái") || text.includes("quay mặt sang trái") || text.includes("xoay đầu sang trái")) {
-      audioFile = "turn_left";
-    } else if (text.includes("quay sang phải") || text.includes("quay mặt sang phải") || text.includes("xoay đầu sang phải")) {
-      audioFile = "turn_right";
-    } else if (text.includes("không thấy khuôn mặt") || text.includes("đưa mặt vào")) {
-      audioFile = "align";
-    } else if (text.includes("trung tâm") || text.includes("giữa khung")) {
-      audioFile = "center";
-    } else if (text.includes("sát hơn")) {
-      audioFile = "closer";
-    } else if (text.includes("lùi nhẹ")) {
-      audioFile = "further";
-    } else if (text.includes("chớp mắt 1 lần")) {
-      audioFile = "blink_once";
-    } else if (text.includes("chớp mắt 2 lần")) {
-      audioFile = "blink_twice";
-    } else if (text.includes("há miệng")) {
-      audioFile = "open_mouth";
-    } else if (text.includes("nhìn thẳng") || text.includes("mắt thẳng")) {
-      audioFile = "neutral";
-    }
+    const audioFile = determineAudioFile(text);
 
     if (audioFile) {
       playAudio(audioFile);
