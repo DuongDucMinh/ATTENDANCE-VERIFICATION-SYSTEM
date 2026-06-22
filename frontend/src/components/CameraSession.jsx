@@ -64,6 +64,59 @@ function isNeutralRecognitionReady(alignment, mouthOpenRatio) {
   );
 }
 
+let globalFaceMesh = null;
+let globalFaceMeshPromise = null;
+
+export const preloadFaceMesh = () => {
+  if (typeof window === "undefined" || !window.FaceMesh) {
+    return Promise.resolve(null);
+  }
+  if (globalFaceMeshPromise) {
+    return globalFaceMeshPromise;
+  }
+  globalFaceMeshPromise = new Promise((resolve) => {
+    try {
+      console.log("Starting background preload of MediaPipe FaceMesh...");
+      const faceMesh = new window.FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+      });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      
+      const onDummyResults = () => {
+        console.log("MediaPipe FaceMesh preloaded and warmed up successfully.");
+        globalFaceMesh = faceMesh;
+        resolve(faceMesh);
+      };
+      
+      faceMesh.onResults(onDummyResults);
+      faceMesh.send({ image: canvas }).catch((err) => {
+        console.log("MediaPipe FaceMesh warmed up (initial send complete).");
+        globalFaceMesh = faceMesh;
+        resolve(faceMesh);
+      });
+    } catch (e) {
+      console.error("Failed to preload FaceMesh:", e);
+      resolve(null);
+    }
+  });
+  return globalFaceMeshPromise;
+};
+
+if (typeof window !== "undefined" && window.FaceMesh) {
+  setTimeout(() => {
+    preloadFaceMesh().catch((err) => console.error("Error preloading FaceMesh:", err));
+  }, 1000);
+}
+
 export default function CameraSession({ mode, studentId, active, onComplete, onStop }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
@@ -268,6 +321,13 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const ctx = overlayRef.current?.getContext("2d");
       if (ctx && overlayRef.current) {
         ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
+      }
+      if (globalFaceMesh) {
+        try {
+          globalFaceMesh.onResults(() => {});
+        } catch (e) {
+          // ignore
+        }
       }
       if (notifyParent) onStop?.();
     };
@@ -864,15 +924,13 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         throw new Error("Camera yeu cau HTTPS hoac localhost.");
       }
 
-      const faceMesh = new window.FaceMesh({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
-      });
-      faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6,
-      });
+      let faceMesh = globalFaceMesh;
+      if (!faceMesh) {
+        faceMesh = await preloadFaceMesh();
+      }
+      if (!faceMesh) {
+        throw new Error("MediaPipe FaceMesh chua san sang. Hay bat dau lai.");
+      }
       faceMesh.onResults((results) => {
         handleLandmarkResults(results).catch((error) => {
           failSession(error.message || "Khong the xu ly khung hinh camera.");
