@@ -121,18 +121,18 @@ export function evaluatePoseState(pose) {
   const yawOk = Math.abs(pose.yawAngle) <= frontYawMax;
   const pitchOk = Math.abs(pose.pitchAngle) <= pitchMax;
 
-  if (!yawOk) return { ok: false, label: "Cảnh báo: mặt đang quay lệch sang trái hoặc phải." };
-  if (!rollOk) return { ok: false, label: "Cảnh báo: đầu đang nghiêng sang một bên." };
-  if (!pitchOk) return { ok: false, label: "Cảnh báo: bạn đang cúi hoặc ngửa đầu." };
-  return { ok: true, label: "Thông báo: tư thế đầu đã đúng." };
+  if (!yawOk) return { ok: false, label: "Giữ đầu thẳng, nhìn trực diện" };
+  if (!rollOk) return { ok: false, label: "Giữ đầu thẳng, không nghiêng" };
+  if (!pitchOk) return { ok: false, label: "Giữ đầu thẳng, không cúi/ngửa" };
+  return { ok: true, label: "Nhìn thẳng vào camera" };
 }
 
 export function getOvalMetrics(overlayWidth, overlayHeight) {
-  const width = overlayWidth * 0.46;
-  const height = overlayHeight * 0.58;
+  const width = overlayWidth * 0.54;
+  const height = overlayHeight * 0.66;
   return {
     centerX: overlayWidth / 2,
-    centerY: overlayHeight - overlayHeight * 0.08 - height / 2,
+    centerY: overlayHeight - overlayHeight * 0.07 - height / 2,
     width,
     height,
     area: Math.PI * (width / 2) * (height / 2),

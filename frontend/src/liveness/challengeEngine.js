@@ -25,12 +25,12 @@ export function createChallengeSteps(mode) {
     timeoutMs: verifyStepTimeoutMs,
     prompt:
       type === "blink_twice"
-        ? "Thử thách: Chớp mắt 2 lần liên tiếp."
+        ? "Chớp mắt 2 lần"
         : type === "turn_left_hold"
-          ? "Thử thách: Quay mặt sang trái nhẹ và giữ 0.4 giây."
+          ? "Quay mặt sang bên Trái"
           : type === "turn_right_hold"
-            ? "Thử thách: Quay mặt sang phải nhẹ và giữ 0.4 giây."
-            : "Thử thách: Há miệng rõ trong khung hình.",
+            ? "Quay mặt sang bên Phải"
+            : "Há miệng rộng",
     poseTarget: type === "turn_left_hold" ? "left" : type === "turn_right_hold" ? "right" : "front",
   }));
 }
@@ -54,23 +54,25 @@ export function createChallengeSession(mode, now) {
   };
 }
 
-function isStepAligned(step, metrics) {
+export function isStepAligned(step, metrics) {
   const { alignment, pose } = THRESHOLDS;
   if (step.type === "turn_left_hold") {
+    const turnSizeOk = metrics.sizeRatio >= 0.40 && metrics.sizeRatio <= 0.95;
     return (
       (metrics.turnCenterCheck ?? metrics.centerCheck) &&
-      metrics.sizeCheck &&
-      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 1.5 &&
-      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 1.3 &&
+      turnSizeOk &&
+      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 2.5 &&
+      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 2.0 &&
       metrics.pose.yawAngle <= pose.leftYawMin
     );
   }
   if (step.type === "turn_right_hold") {
+    const turnSizeOk = metrics.sizeRatio >= 0.40 && metrics.sizeRatio <= 0.95;
     return (
       (metrics.turnCenterCheck ?? metrics.centerCheck) &&
-      metrics.sizeCheck &&
-      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 1.5 &&
-      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 1.3 &&
+      turnSizeOk &&
+      Math.abs(metrics.pose.rollAngle) <= alignment.rollMax * 2.5 &&
+      Math.abs(metrics.pose.pitchAngle) <= alignment.pitchMax * 2.0 &&
       metrics.pose.yawAngle >= pose.rightYawMin
     );
   }

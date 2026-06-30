@@ -24,10 +24,10 @@ export const THRESHOLDS = {
   session: {
     alignmentHoldMs: 1000,
     poseHoldMs: 400,
-    verifyStepTimeoutMs: 10000,
-    verifySessionTimeoutMs: 20000,
+    verifyStepTimeoutMs: 15000,
+    verifySessionTimeoutMs: 30000,
     verifyNeutralCaptureHoldMs: 1000,
-    verifyStabilityTimeoutMs: 10000,
+    verifyStabilityTimeoutMs: 15000,
     registerSessionTimeoutMs: 30000,
   },
   blink: {
@@ -40,8 +40,8 @@ export const THRESHOLDS = {
   alignment: {
     strictCenterX: 0.12,
     strictCenterY: 0.12,
-    turnCenterX: 0.24,
-    turnCenterY: 0.16,
+    turnCenterX: 0.40,
+    turnCenterY: 0.30,
     wrongTurnYaw: 8,
     frontYawMax: 11,
     rollMax: 10,
@@ -75,22 +75,22 @@ export const REGISTER_POSE_STEPS = [
   {
     id: "front",
     type: "blink_once",
-    prompt: "Giữ mặt thẳng trong khung và chớp mắt 1 lần.",
+    prompt: "Chớp mắt 1 lần",
     poseTarget: "front",
-    timeoutMs: 12000,
+    timeoutMs: 15000,
   },
   {
     id: "left",
     type: "turn_left_hold",
-    prompt: "Quay mặt sang trái nhẹ và giữ 0,4 giây.",
+    prompt: "Quay mặt sang bên Trái",
     poseTarget: "left",
-    timeoutMs: 8000,
+    timeoutMs: 15000,
   },
   {
     id: "right",
     type: "turn_right_hold",
-    prompt: "Quay mặt sang phải nhẹ và giữ 0,4 giây.",
+    prompt: "Quay mặt sang bên Phải",
     poseTarget: "right",
-    timeoutMs: 8000,
+    timeoutMs: 15000,
   },
 ];
