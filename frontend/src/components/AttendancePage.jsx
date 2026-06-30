@@ -45,12 +45,7 @@ export default function AttendancePage({ defaultStudentId }) {
       <section className="panel">
         <div className="panel-heading">
           <h2>Điểm danh</h2>
-          {typeof runtimeConfig?.similarity_threshold === "number" ? (
-            <p style={{ marginTop: '8px', fontSize: '0.85rem' }}>
-              Ngưỡng similarity tối thiểu: <strong>{runtimeConfig.similarity_threshold.toFixed(3)}</strong>
-              {runtimeConfig?.similarity_threshold_source ? ` (${runtimeConfig.similarity_threshold_source})` : ""}
-            </p>
-          ) : null}
+
         </div>
 
         <label className="inline-field" style={{ marginTop: '16px' }}>
@@ -66,7 +61,7 @@ export default function AttendancePage({ defaultStudentId }) {
               <p>Thời gian: {new Date(result.createdAt).toLocaleString("vi-VN")}</p>
               {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
               {typeof decision?.threshold === "number" ? <p>Ngưỡng: {decision.threshold.toFixed(3)}</p> : null}
-              {typeof decision?.raw_match_score === "number" ? <p>Điểm khớp thô: {decision.raw_match_score.toFixed(3)}</p> : null}
+
               {result.reason ? <p>Lý do: {result.reason}</p> : null}
             </article>
           ) : (

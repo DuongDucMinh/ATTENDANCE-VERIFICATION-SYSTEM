@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { registerFace, verifyAttendance } from "../lib/api";
-import { advanceChallengeSession, createChallengeSession, evaluateChallengeFrame } from "../liveness/challengeEngine";
+import { advanceChallengeSession, createChallengeSession, evaluateChallengeFrame, isStepAligned } from "../liveness/challengeEngine";
 import { FRAME_CONFIG, THRESHOLDS, FACE_LANDMARKS } from "../liveness/constants";
 import { createFrameSampler, dataUrlToBlob } from "../liveness/frameSampler";
 import { computeAlignmentState, computeEar, computeMouthOpenRatio } from "../liveness/geometry";
@@ -78,7 +78,7 @@ export const preloadFaceMesh = () => {
     try {
       console.log("Starting background preload of MediaPipe FaceMesh...");
       const faceMesh = new window.FaceMesh({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+        locateFile: (file) => `/libs/mediapipe/${file}`,
       });
       faceMesh.setOptions({
         maxNumFaces: 1,
@@ -162,6 +162,86 @@ export const unlockAndPreloadAudio = () => {
   });
 };
 
+function LivenessInstructionAnimation({ stepType }) {
+  const renderSVG = () => {
+    switch (stepType) {
+      case "turn_left_hold":
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-left">
+            <path className="arrow-left" d="M 28,50 L 8,50 M 16,42 L 8,50 L 16,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <g className="parallax-head">
+              <circle className="head-circle" cx="55" cy="50" r="24" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+              <g className="face-features">
+                <circle cx="45" cy="45" r="2" fill="#ffd449" />
+                <circle cx="65" cy="45" r="2" fill="#ffd449" />
+                <path d="M 55,47 L 53,51 L 55,51" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <path d="M 49,58 Q 55,61 61,58" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </g>
+            </g>
+          </svg>
+        );
+      case "turn_right_hold":
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-right">
+            <path className="arrow-right" d="M 72,50 L 92,50 M 84,42 L 92,50 L 84,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <g className="parallax-head">
+              <circle className="head-circle" cx="45" cy="50" r="24" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+              <g className="face-features">
+                <circle cx="35" cy="45" r="2" fill="#ffd449" />
+                <circle cx="55" cy="45" r="2" fill="#ffd449" />
+                <path d="M 45,47 L 47,51 L 45,51" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <path d="M 39,58 Q 45,61 51,58" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </g>
+            </g>
+          </svg>
+        );
+      case "open_mouth":
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-mouth">
+            <circle cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+            <circle cx="39" cy="44" r="2.5" fill="#f3f1ea" />
+            <circle cx="61" cy="44" r="2.5" fill="#f3f1ea" />
+            <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" />
+            <ellipse className="mouth-ellipse" cx="50" cy="61" rx="8" ry="7.5" fill="#ffd449" stroke="#ffd449" strokeWidth="1" />
+          </svg>
+        );
+      case "blink_once":
+      case "blink_twice":
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-blink">
+            <circle cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+            <circle className="eye-left" cx="39" cy="44" r="3" fill="#ffd449" />
+            <circle className="eye-right" cx="61" cy="44" r="3" fill="#ffd449" />
+            <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 42,61 Q 50,64 58,61" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+          </svg>
+        );
+      default:
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-align">
+            <circle cx="50" cy="50" r="24" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
+            <circle cx="40" cy="45" r="2" fill="#f3f1ea" />
+            <circle cx="60" cy="45" r="2" fill="#f3f1ea" />
+            <path d="M 50,49 L 50,53" stroke="#f3f1ea" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M 42,60 Q 50,63 58,60" stroke="#f3f1ea" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            <path className="focus-corner tl" d="M 16,30 L 16,16 L 30,16" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+            <path className="focus-corner tr" d="M 84,30 L 84,16 L 70,16" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+            <path className="focus-corner bl" d="M 16,70 L 16,84 L 30,84" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+            <path className="focus-corner br" d="M 84,70 L 84,84 L 70,84" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+          </svg>
+        );
+    }
+  };
+
+  return (
+    <div className="liveness-feedback-area">
+      <div className="anim-container">
+        {renderSVG()}
+      </div>
+    </div>
+  );
+}
+
 export default function CameraSession({ mode, studentId, active, onComplete, onStop }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
@@ -208,11 +288,37 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
   const lastDebugUpdateRef = useRef(0);
   const lastPlayedRef = useRef({ name: "", timestamp: 0 });
 
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabledRef = useRef(true);
+  const [activeChallengeType, setActiveChallengeType] = useState(null);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+    if (!soundEnabled) {
+      Object.values(globalAudioCache).forEach(a => {
+        try {
+          a.pause();
+          a.currentTime = 0;
+        } catch (e) {}
+      });
+      if (window.currentPlayingAudio) {
+        try {
+          window.currentPlayingAudio.pause();
+          window.currentPlayingAudio.currentTime = 0;
+        } catch (e) {}
+        window.currentPlayingAudio = null;
+      }
+    }
+  }, [soundEnabled]);
+
   useEffect(() => {
     showDebugRef.current = showDebug;
   }, [showDebug]);
 
   const playAudio = (name, minIntervalMs = 2000) => {
+    if (!soundEnabledRef.current) {
+      return;
+    }
     try {
       const now = performance.now();
       const last = lastPlayedRef.current;
@@ -329,6 +435,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     state.neutralCapturePhaseStartedAt = null;
     samplerRef.current.clear();
     setBlockingMessage("");
+    setActiveChallengeType(null);
 
     let cancelled = false;
 
@@ -467,6 +574,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
     const failSession = (reason) => {
       stopSession();
+      setActiveChallengeType(null);
       onComplete({
         mode,
         ok: false,
@@ -556,6 +664,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         });
         const data = await verifyAttendance(studentId, blob, captureMeta);
         stopSession();
+        setActiveChallengeType(null);
         onComplete({
           mode,
           ok: data.status === "Success",
@@ -595,6 +704,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
           if (nextChallenge.status === "completed") {
             stopSession();
+            setActiveChallengeType(null);
             onComplete({
               mode,
               ok: true,
@@ -606,6 +716,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             });
             return;
           }
+
+          const nextStep = nextChallenge.steps?.[nextChallenge.currentStepIndex] ?? null;
+          setActiveChallengeType(nextStep?.type || null);
 
           const poseTargetVi = step.poseTarget === "left" ? "quay trái" : step.poseTarget === "right" ? "quay phải" : "nhìn thẳng";
           setTelemetry({
@@ -619,6 +732,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         const nextChallenge = advanceChallengeSession(state.challenge, performance.now());
         if (nextChallenge.status !== "completed") {
           state.challenge = nextChallenge;
+          const nextStep = nextChallenge.steps?.[nextChallenge.currentStepIndex] ?? null;
+          setActiveChallengeType(nextStep?.type || null);
+
           setTelemetry((current) => ({
             ...current,
             status: "Đang điểm danh",
@@ -633,6 +749,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         state.neutralCaptureStartedAt = null;
         state.neutralCapturePhaseStartedAt = performance.now();
         samplerRef.current.clear();
+        setActiveChallengeType("neutral_capture");
+
         setTelemetry({
           status: "Đang điểm danh",
           hint: "Thử thách đã xong. Quay về mắt thẳng và giữ ổn định để chụp ảnh xác nhận.",
@@ -678,10 +796,25 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         alignment.centerOffsetY <= THRESHOLDS.alignment.turnCenterY;
       const neutralRecognitionReady = isNeutralRecognitionReady(alignment, mouthOpenRatio);
 
+      const stepAligned = currentStep ? isStepAligned(currentStep, {
+        aligned: alignment.aligned,
+        centerCheck: alignment.centerCheck,
+        turnCenterCheck,
+        sizeCheck: alignment.sizeCheck,
+        sizeRatio: alignment.sizeRatio,
+        pose: alignment.pose,
+        mouthOpenRatio,
+        blinkDetected,
+      }) : alignment.aligned;
+
       drawOverlay(
         alignment.displayBox,
         alignment.anchorPoint,
-        state.processing ? "success" : alignment.aligned ? "info" : "error",
+        state.processing
+          ? "success"
+          : (!state.alignmentReady ? alignment.aligned : stepAligned)
+            ? "info"
+            : "error",
       );
 
       const samplingReady = alignment.sourceBox.width > 0 && alignment.sourceBox.height > 0;
@@ -737,6 +870,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             state.alignmentReady = true;
             state.challenge = createChallengeSession(mode, now);
             samplerRef.current.clear();
+            const firstStep = state.challenge.steps?.[0] ?? null;
+            setActiveChallengeType(firstStep?.type || null);
             setTelemetry({
               status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
               hint: state.challenge.prompt,
@@ -747,18 +882,18 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
           setTelemetry({
             status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
-            hint: `Thông báo: giữ nguyên tư thế trong khung thêm ${(remainingMs / 1000).toFixed(1)}s trước khi bắt đầu thử thách.`,
+            hint: `Giữ yên khuôn mặt (${(remainingMs / 1000).toFixed(1)}s)`,
             tone: "info",
           });
           return;
         }
 
         state.alignmentStartedAt = null;
-        let preAlignHint = "Thông báo: đưa mặt vào đúng khung và giữ ổn định trước khi bắt đầu thử thách.";
+        let preAlignHint = "Nhìn thẳng vào camera";
         let preAlignTone = "info";
 
         if (!alignment.centerCheck) {
-          preAlignHint = "Cảnh báo: đưa mặt vào giữa khung.";
+          preAlignHint = "Đưa mặt vào giữa khung";
           preAlignTone = "error";
         } else if (!alignment.poseState.ok) {
           preAlignHint = alignment.poseState.label;
@@ -766,8 +901,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         } else if (!alignment.sizeCheck) {
           preAlignHint =
             alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-              ? "Cảnh báo: hãy đưa mặt sát hơn vào camera."
-              : "Cảnh báo: hãy lùi nhẹ ra sau.";
+              ? "Đưa mặt lại gần camera hơn"
+              : "Lùi mặt xa camera một chút";
           preAlignTone = "error";
         }
 
@@ -859,6 +994,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         centerCheck: alignment.centerCheck,
         turnCenterCheck,
         sizeCheck: alignment.sizeCheck,
+        sizeRatio: alignment.sizeRatio,
         pose: alignment.pose,
         mouthOpenRatio,
         blinkDetected,
@@ -886,22 +1022,22 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       const isTurnChallenge = currentStep?.type === "turn_left_hold" || currentStep?.type === "turn_right_hold";
 
       if (currentStep?.type === "turn_left_hold" && alignment.pose.yawAngle > THRESHOLDS.alignment.wrongTurnYaw) {
-        hint = "Cảnh báo: bạn đang quay sang phải, hãy quay sang trái theo yêu cầu.";
+        hint = "Hãy quay sang Trái";
         tone = "error";
       } else if (currentStep?.type === "turn_right_hold" && alignment.pose.yawAngle < -THRESHOLDS.alignment.wrongTurnYaw) {
-        hint = "Cảnh báo: bạn đang quay sang trái, hãy quay sang phải theo yêu cầu.";
+        hint = "Hãy quay sang Phải";
         tone = "error";
       } else if (!alignment.centerCheck && !isTurnChallenge) {
-        hint = "Cảnh báo: đưa mặt vào giữa khung.";
+        hint = "Đưa mặt vào giữa khung";
         tone = "error";
       } else if (isTurnChallenge && !turnCenterCheck) {
-        hint = "Cảnh báo: khi quay mặt, vẫn cần giữ khuôn mặt nằm trong vùng trung tâm mở rộng.";
+        hint = "Giữ khuôn mặt trong khung khi quay";
         tone = "error";
       } else if (isTurnChallenge && Math.abs(alignment.pose.rollAngle) > THRESHOLDS.alignment.rollMax) {
-        hint = "Cảnh báo: bạn đang nghiêng đầu, hãy giữ đầu thẳng khi quay mặt.";
+        hint = "Giữ thẳng đầu, không nghiêng";
         tone = "error";
       } else if (isTurnChallenge && Math.abs(alignment.pose.pitchAngle) > THRESHOLDS.alignment.pitchMax) {
-        hint = "Cảnh báo: không cúi hoặc ngửa đầu khi thực hiện quay mặt.";
+        hint = "Giữ thẳng đầu, không cúi/ngửa";
         tone = "error";
       } else if (!isTurnChallenge && !alignment.poseState.ok) {
         hint = alignment.poseState.label;
@@ -909,8 +1045,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       } else if (!alignment.sizeCheck) {
         hint =
           alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-            ? "Cảnh báo: hãy đưa mặt sát hơn vào camera."
-            : "Cảnh báo: hãy lùi nhẹ ra sau.";
+            ? "Đưa mặt lại gần camera hơn"
+            : "Lùi mặt xa camera một chút";
         tone = "error";
       }
 
@@ -935,7 +1071,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       resizeCanvas();
       setTelemetry({
         status: mode === "register" ? "Đang đăng ký khuôn mặt" : "Đang điểm danh",
-        hint: "Thông báo: đưa mặt vào đúng khung và giữ ổn định trước khi bắt đầu thử thách.",
+        hint: "Nhìn thẳng vào camera và giữ yên",
         tone: "info",
       });
 
@@ -1019,7 +1155,21 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     <section className="camera-surface">
       <div className="camera-header">
         <h3>{mode === "register" ? "Đăng ký khuôn mặt" : "Xác nhận điểm danh"}</h3>
-        <button type="button" className="close-btn" onClick={onStop} aria-label="Đóng camera">✕</button>
+        <div className="header-controls">
+          <button 
+            type="button" 
+            className={`sound-toggle-btn ${soundEnabled ? "enabled" : "disabled"}`} 
+            onClick={() => setSoundEnabled(!soundEnabled)} 
+            aria-label={soundEnabled ? "Tắt âm thanh" : "Bật âm thanh"}
+          >
+            {soundEnabled ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+            )}
+          </button>
+          <button type="button" className="close-btn" onClick={onStop} aria-label="Đóng camera">✕</button>
+        </div>
       </div>
 
       <div className="camera-layout">
@@ -1041,6 +1191,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             </div>
           ) : null}
         </div>
+
+        <LivenessInstructionAnimation stepType={activeChallengeType} />
 
         <div className="camera-controls">
           <button type="button" className="ghost-btn cancel-btn" onClick={onStop}>
