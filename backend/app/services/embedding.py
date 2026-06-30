@@ -50,9 +50,21 @@ class InsightFaceEmbeddingService:
                 "InsightFace is not installed. Run `pip install -r requirements.txt`."
             ) from exc
 
+        # Giới hạn số luồng ONNX Runtime trên CPU để tránh tranh chấp luồng khi chạy song song
+        import os
+        os.environ["OMP_NUM_THREADS"] = "2"
+        os.environ["MKL_NUM_THREADS"] = "2"
+        os.environ["OPENBLAS_NUM_THREADS"] = "2"
+        os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+        os.environ["NUMEXPR_NUM_THREADS"] = "2"
+
         try:
-            self.face_analysis = FaceAnalysis(name="buffalo_s", providers=["CPUExecutionProvider"])
-            self.face_analysis.prepare(ctx_id=-1, det_size=(640, 640))
+            self.face_analysis = FaceAnalysis(
+                name="buffalo_s",
+                allowed_modules=["detection", "recognition"],
+                providers=["CPUExecutionProvider"]
+            )
+            self.face_analysis.prepare(ctx_id=-1, det_size=(320, 320))
         except Exception as exc:  # pragma: no cover
             raise ModelUnavailableError(f"Failed to initialize FaceAnalysis: {exc}") from exc
 
@@ -92,13 +104,37 @@ class LazyInsightFaceEmbeddingService:
         return self._service
 
     def warm_up(self) -> None:
+        import sys
         service = self._ensure_service()
         try:
-            dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+            # 1. Warm-up detector
+            dummy_img = np.zeros((320, 320, 3), dtype=np.uint8)
             service.face_analysis.get(dummy_img)
-            LOGGER.info("InsightFace dummy inference warm-up completed successfully.")
+
+            # 2. Warm-up recognizer (bằng cách giả lập đối tượng Face có keypoints và chạy model recognition)
+            if hasattr(service.face_analysis, "models") and "recognition" in service.face_analysis.models:
+                from insightface.app.common import Face
+                mock_face = Face()
+                # 5 keypoints giả lập (mắt trái, mắt phải, mũi, miệng trái, miệng phải) trên ảnh 320x320
+                mock_face.kps = np.array([
+                    [120, 140],
+                    [200, 140],
+                    [160, 180],
+                    [130, 220],
+                    [190, 220]
+                ], dtype=np.float32)
+                # Bổ sung bbox giả lập để tránh thiếu thuộc tính trên một số phiên bản insightface
+                mock_face.bbox = np.array([100, 100, 220, 220], dtype=np.float32)
+
+                rec_model = service.face_analysis.models["recognition"]
+                rec_model.get(dummy_img, mock_face)
+
+            # Sử dụng print ra stdout để hiển thị chắc chắn trên uvicorn log console
+            print("InsightFace (detector & recognizer) warm-up completed successfully.")
+            LOGGER.info("InsightFace (detector & recognizer) warm-up completed successfully.")
         except Exception as e:
-            LOGGER.warning("InsightFace dummy inference warm-up failed: %s", e)
+            print(f"InsightFace warm-up failed: {e}", file=sys.stderr)
+            LOGGER.warning("InsightFace warm-up failed: %s", e)
 
     def extract_embedding(self, image_bgr: np.ndarray) -> np.ndarray:
         return self._ensure_service().extract_embedding(image_bgr)
