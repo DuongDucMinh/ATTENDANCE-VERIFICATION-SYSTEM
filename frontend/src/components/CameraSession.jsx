@@ -44,9 +44,9 @@ function formatQualityState(quality) {
 function getQualityWarning(quality) {
   if (!quality) return null;
   const { blurMin, brightnessMin, brightnessMax } = THRESHOLDS.quality;
-  if (quality.blurScore < blurMin) return "Cảnh báo: camera đang mờ, hãy giữ máy ổn định hoặc tăng ánh sáng.";
-  if (quality.brightnessMean < brightnessMin) return "Cảnh báo: ảnh đang quá tối, hãy tăng ánh sáng.";
-  if (quality.brightnessMean > brightnessMax) return "Cảnh báo: ảnh đang quá sáng, hãy giảm nguồn sáng trực tiếp.";
+  if (quality.blurScore < blurMin) return "Camera đang mờ, hãy giữ máy ổn định hoặc tăng ánh sáng.";
+  if (quality.brightnessMean < brightnessMin) return "Ảnh đang quá tối, hãy tăng ánh sáng.";
+  if (quality.brightnessMean > brightnessMax) return "Ảnh đang quá sáng, hãy giảm nguồn sáng trực tiếp.";
   return null;
 }
 
@@ -170,12 +170,12 @@ function LivenessInstructionAnimation({ stepType }) {
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-left">
             <path className="arrow-left" d="M 28,50 L 8,50 M 16,42 L 8,50 L 16,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <g className="parallax-head">
-              <circle className="head-circle" cx="55" cy="50" r="24" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+              <circle className="head-circle" cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
               <g className="face-features">
-                <circle cx="45" cy="45" r="2" fill="#ffd449" />
-                <circle cx="65" cy="45" r="2" fill="#ffd449" />
-                <path d="M 55,47 L 53,51 L 55,51" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
-                <path d="M 49,58 Q 55,61 61,58" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <circle cx="39" cy="44" r="4.5" fill="#ffd449" />
+                <circle cx="61" cy="44" r="4.5" fill="#ffd449" />
+                <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <path d="M 42,61 Q 50,64 58,61" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
               </g>
             </g>
           </svg>
@@ -185,12 +185,12 @@ function LivenessInstructionAnimation({ stepType }) {
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-right">
             <path className="arrow-right" d="M 72,50 L 92,50 M 84,42 L 92,50 L 84,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <g className="parallax-head">
-              <circle className="head-circle" cx="45" cy="50" r="24" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+              <circle className="head-circle" cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
               <g className="face-features">
-                <circle cx="35" cy="45" r="2" fill="#ffd449" />
-                <circle cx="55" cy="45" r="2" fill="#ffd449" />
-                <path d="M 45,47 L 47,51 L 45,51" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
-                <path d="M 39,58 Q 45,61 51,58" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <circle cx="39" cy="44" r="4.5" fill="#ffd449" />
+                <circle cx="61" cy="44" r="4.5" fill="#ffd449" />
+                <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
+                <path d="M 42,61 Q 50,64 58,61" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
               </g>
             </g>
           </svg>
@@ -199,8 +199,8 @@ function LivenessInstructionAnimation({ stepType }) {
         return (
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-mouth">
             <circle cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
-            <circle cx="39" cy="44" r="2.5" fill="#f3f1ea" />
-            <circle cx="61" cy="44" r="2.5" fill="#f3f1ea" />
+            <circle cx="39" cy="44" r="4.5" fill="#ffd449" />
+            <circle cx="61" cy="44" r="4.5" fill="#ffd449" />
             <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" />
             <ellipse className="mouth-ellipse" cx="50" cy="61" rx="8" ry="7.5" fill="#ffd449" stroke="#ffd449" strokeWidth="1" />
           </svg>
@@ -210,8 +210,8 @@ function LivenessInstructionAnimation({ stepType }) {
         return (
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-blink">
             <circle cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
-            <circle className="eye-left" cx="39" cy="44" r="3" fill="#ffd449" />
-            <circle className="eye-right" cx="61" cy="44" r="3" fill="#ffd449" />
+            <circle className="eye-left" cx="39" cy="44" r="4.5" fill="#ffd449" />
+            <circle className="eye-right" cx="61" cy="44" r="4.5" fill="#ffd449" />
             <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" />
             <path d="M 42,61 Q 50,64 58,61" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
           </svg>
@@ -219,11 +219,11 @@ function LivenessInstructionAnimation({ stepType }) {
       default:
         return (
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-align">
-            <circle cx="50" cy="50" r="24" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
-            <circle cx="40" cy="45" r="2" fill="#f3f1ea" />
-            <circle cx="60" cy="45" r="2" fill="#f3f1ea" />
-            <path d="M 50,49 L 50,53" stroke="#f3f1ea" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M 42,60 Q 50,63 58,60" stroke="#f3f1ea" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            <circle cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
+            <circle cx="39" cy="44" r="4.5" fill="#ffd449" />
+            <circle cx="61" cy="44" r="4.5" fill="#ffd449" />
+            <path d="M 50,48 L 50,53" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 42,61 Q 50,64 58,61" stroke="#f3f1ea" strokeWidth="2" strokeLinecap="round" fill="none" />
             <path className="focus-corner tl" d="M 16,30 L 16,16 L 30,16" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
             <path className="focus-corner tr" d="M 84,30 L 84,16 L 70,16" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
             <path className="focus-corner bl" d="M 16,70 L 16,84 L 30,84" stroke="#ffd449" strokeWidth="2.5" strokeLinecap="round" fill="none" />
@@ -259,9 +259,11 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     challenge: null,
     alignmentReady: false,
     alignmentStartedAt: null,
+    sessionOpenedAt: null,
     verifyNeutralCapture: false,
     neutralCaptureStartedAt: null,
     neutralCapturePhaseStartedAt: null,
+    confirmingCancel: false,
   });
 
   const [telemetry, setTelemetry] = useState({
@@ -290,6 +292,13 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const capturedSamplesRef = useRef([]);
+  const confirmStartedAtRef = useRef(null);
+
+  useEffect(() => {
+    sessionRef.current.confirmingCancel = showCancelConfirm;
+  }, [showCancelConfirm]);
   const [activeChallengeType, setActiveChallengeType] = useState(null);
 
   useEffect(() => {
@@ -430,11 +439,15 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     state.challenge = null;
     state.alignmentReady = false;
     state.alignmentStartedAt = null;
+    state.sessionOpenedAt = null;
     state.verifyNeutralCapture = false;
     state.neutralCaptureStartedAt = null;
     state.neutralCapturePhaseStartedAt = null;
+    state.confirmingCancel = false;
     samplerRef.current.clear();
+    capturedSamplesRef.current = [];
     setBlockingMessage("");
+    setShowCancelConfirm(false);
     setActiveChallengeType(null);
 
     let cancelled = false;
@@ -509,8 +522,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
       if (state.baselineEar < blink.minBaselineEar) return false;
 
-      const closeThreshold = Math.max(blink.closeFloorEar, state.baselineEar * 0.68);
-      const recoverThreshold = Math.max(blink.recoverFloorEar, state.baselineEar * 0.82);
+      const closeThreshold = Math.max(blink.closeFloorEar, state.baselineEar * 0.72);
+      const recoverThreshold = Math.max(blink.recoverFloorEar, state.baselineEar * 0.84);
 
       if (state.blinkState === "idle") {
         if (ear < closeThreshold) {
@@ -535,8 +548,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           return validBlink;
         }
 
-        state.blinkState = "idle";
-        state.blinkFrameCount = 0;
+        // Khi ear nằm giữa closeThreshold và recoverThreshold, tiếp tục giữ closing và tăng count
+        state.blinkFrameCount = Math.min(state.blinkFrameCount + 1, blink.maxBlinkFrames);
+        if (state.blinkFrameCount >= blink.maxBlinkFrames) {
+          state.blinkState = "idle";
+          state.blinkFrameCount = 0;
+        }
       }
 
       return false;
@@ -687,7 +704,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
       if (state.processing || state.stopped) return;
       state.processing = true;
       const poseTargetVi = step.poseTarget === "left" ? "quay trái" : step.poseTarget === "right" ? "quay phải" : "nhìn thẳng";
-      setBlockingMessage(mode === "register" ? `Đang lưu mẫu ${poseTargetVi}...` : "Đang tổng hợp kết quả điểm danh...");
+      setBlockingMessage(mode === "register" ? `Đang ghi nhận mẫu ${poseTargetVi}...` : "Đang tổng hợp kết quả điểm danh...");
 
       try {
         if (mode === "register") {
@@ -697,22 +714,34 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
             poseLabel: step.poseTarget,
             challengeSequence: [step.type],
           });
-          const data = await registerFace(studentId, step.poseTarget, blob, captureMeta);
+          
+          capturedSamplesRef.current.push({
+            poseLabel: step.poseTarget,
+            blob,
+            captureMeta,
+          });
+
           const nextChallenge = advanceChallengeSession(state.challenge, performance.now());
           state.challenge = nextChallenge;
           samplerRef.current.clear();
 
           if (nextChallenge.status === "completed") {
+            setBlockingMessage("Đang lưu tất cả mẫu khuôn mặt lên máy chủ...");
+            
+            for (const sample of capturedSamplesRef.current) {
+              await registerFace(studentId, sample.poseLabel, sample.blob, sample.captureMeta);
+            }
+
             stopSession();
             setActiveChallengeType(null);
             onComplete({
               mode,
               ok: true,
-              status: data.status,
-              studentId: data.student_id,
+              status: "Registered",
+              studentId,
               score: null,
               reason: null,
-              createdAt: data.created_at,
+              createdAt: new Date().toISOString(),
             });
             return;
           }
@@ -720,10 +749,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           const nextStep = nextChallenge.steps?.[nextChallenge.currentStepIndex] ?? null;
           setActiveChallengeType(nextStep?.type || null);
 
-          const poseTargetVi = step.poseTarget === "left" ? "quay trái" : step.poseTarget === "right" ? "quay phải" : "nhìn thẳng";
           setTelemetry({
             status: "Đang đăng ký khuôn mặt",
-            hint: `Mẫu ${poseTargetVi} đã lưu. ${nextChallenge.prompt}`,
+            hint: `Mẫu ${poseTargetVi} đã được ghi nhận. ${nextChallenge.prompt}`,
             tone: "success",
           });
           return;
@@ -768,7 +796,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     const handleLandmarkResults = async (results) => {
       const faceLandmarks = results.multiFaceLandmarks?.[0];
       const sourceImage = results.image;
-      if (!sourceImage || state.stopped) return;
+      if (!sourceImage || state.stopped || state.confirmingCancel) return;
       resizeCanvas();
       state.frameIndex += 1;
 
@@ -777,7 +805,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         setTelemetry((current) => ({
           ...current,
           status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
-          hint: "Canh bao: khong thay khuon mat trong camera.",
+          hint: "không thấy khuôn mặt trong camera",
           tone: "error",
         }));
         return;
@@ -823,7 +851,8 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         !state.processing &&
         samplingReady &&
         state.frameIndex % FRAME_CONFIG.sampleEveryNFrames === 0 &&
-        (mode !== "verify" || !state.verifyNeutralCapture || neutralRecognitionReady)
+        (mode !== "verify" || !state.verifyNeutralCapture || neutralRecognitionReady) &&
+        (mode !== "register" || !currentStep || stepAligned)
       ) {
         samplerRef.current.push({
           sourceImage: videoRef.current,
@@ -850,6 +879,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         (bufferedFrames.length ? computeQualitySummary(bufferedFrames[bufferedFrames.length - 1]) : null);
 
       if (!state.alignmentReady) {
+        state.sessionOpenedAt = state.sessionOpenedAt ?? now;
+        if (now - state.sessionOpenedAt > THRESHOLDS.session.alignmentTimeoutMs) {
+          failSession("Không căn chỉnh khuôn mặt đúng thời gian.");
+          return;
+        }
+
         updateDebug({
           phase: "pre_alignment",
           currentStepType: currentStep?.type || null,
@@ -929,9 +964,9 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
         if (
           state.neutralCapturePhaseStartedAt &&
-          now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyNeutralCaptureTimeoutMs
+          now - state.neutralCapturePhaseStartedAt > THRESHOLDS.session.verifyStabilityTimeoutMs
         ) {
-          failSession("Đã hoàn tất thử thách nhưng không giữ được mặt thẳng ổn định để chụp ảnh xác nhận.");
+          failSession("Không giữ được mặt thẳng ổn định để chụp ảnh xác nhận.");
           return;
         }
 
@@ -957,25 +992,25 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         let neutralHint = "Quay về mắt thẳng, nhìn vào camera và giữ khuôn mặt ổn định để chụp ảnh xác nhận.";
         let neutralTone = "info";
         if (!alignment.centerCheck) {
-          neutralHint = "Cảnh báo: đưa mặt vào giữa khung để chụp ảnh xác nhận.";
+          neutralHint = "Đưa mặt vào giữa khung để chụp ảnh xác nhận.";
           neutralTone = "error";
         } else if (!alignment.sizeCheck) {
           neutralHint =
             alignment.sizeRatio < THRESHOLDS.alignment.faceSizeMinRatio
-              ? "Cảnh báo: hãy đưa mặt sát hơn vào camera."
-              : "Cảnh báo: hãy lùi nhẹ ra sau.";
+              ? "Hãy đưa mặt sát hơn vào camera."
+              : "Hãy lùi nhẹ ra sau.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.yawAngle) > THRESHOLDS.alignment.frontYawMax) {
-          neutralHint = "Cảnh báo: hãy quay mặt về thẳng trước camera.";
+          neutralHint = "Hãy quay mặt về thẳng trước camera.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.pitchAngle) > THRESHOLDS.alignment.pitchMax) {
-          neutralHint = "Cảnh báo: hãy giữ đầu thẳng, không cúi hoặc ngửa.";
+          neutralHint = "Hãy giữ đầu thẳng, không cúi hoặc ngửa.";
           neutralTone = "error";
         } else if (Math.abs(alignment.pose.rollAngle) > THRESHOLDS.alignment.rollMax) {
-          neutralHint = "Cảnh báo: hãy giữ đầu thẳng, không nghiêng.";
+          neutralHint = "Hãy giữ đầu thẳng, không nghiêng.";
           neutralTone = "error";
         } else if ((mouthOpenRatio ?? 0) > Math.max(0.18, THRESHOLDS.pose.mouthOpenRatioMin * 0.75)) {
-          neutralHint = "Cảnh báo: hãy ngậm miệng và giữ biểu cảm tự nhiên.";
+          neutralHint = "Hãy ngậm miệng và giữ biểu cảm tự nhiên.";
           neutralTone = "error";
         }
 
@@ -1125,7 +1160,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
       const camera = new window.Camera(videoRef.current, {
         onFrame: async () => {
-          if (!sessionRef.current.stopped && !sessionRef.current.processing) {
+          if (!sessionRef.current.stopped && !sessionRef.current.processing && !sessionRef.current.confirmingCancel) {
             await faceMesh.send({ image: videoRef.current });
           }
         },
@@ -1151,6 +1186,42 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
     ? debugState.turnCenterCheck
     : debugState.centerCheck;
 
+  const handleCancelClick = () => {
+    confirmStartedAtRef.current = performance.now();
+    setShowCancelConfirm(true);
+  };
+
+  const resumeSession = () => {
+    setShowCancelConfirm(false);
+    if (confirmStartedAtRef.current) {
+      const duration = performance.now() - confirmStartedAtRef.current;
+      confirmStartedAtRef.current = null;
+
+      const state = sessionRef.current;
+      if (state.sessionOpenedAt != null) state.sessionOpenedAt += duration;
+      if (state.alignmentStartedAt != null) state.alignmentStartedAt += duration;
+      if (state.neutralCapturePhaseStartedAt != null) state.neutralCapturePhaseStartedAt += duration;
+      if (state.neutralCaptureStartedAt != null) state.neutralCaptureStartedAt += duration;
+
+      if (state.challenge) {
+        if (state.challenge.sessionStartedAt != null) state.challenge.sessionStartedAt += duration;
+        if (state.challenge.stepStartedAt != null) state.challenge.stepStartedAt += duration;
+        if (state.challenge.holdStartedAt != null) state.challenge.holdStartedAt += duration;
+      }
+
+      if (lastPlayedRef.current && lastPlayedRef.current.timestamp != null) {
+        lastPlayedRef.current.timestamp += duration;
+      }
+    }
+  };
+
+  const isRegister = mode === "register";
+  const confirmText = isRegister
+    ? "Dữ liệu khuôn mặt sẽ không được lưu. Bạn có chắc chắn hủy không?"
+    : "Bạn có chắc chắn muốn thoát phiên điểm danh không";
+  const confirmBtnStayText = isRegister ? "Ở lại tiếp tục phiên đăng ký" : "Tiếp tục điểm danh";
+  const confirmBtnLeaveText = isRegister ? "Hủy đăng ký" : "Thoát";
+
   return (
     <section className="camera-surface">
       <div className="camera-header">
@@ -1168,21 +1239,23 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
             )}
           </button>
-          <button type="button" className="close-btn" onClick={onStop} aria-label="Đóng camera">✕</button>
+          <button type="button" className="close-btn" onClick={handleCancelClick} aria-label="Đóng camera">✕</button>
         </div>
       </div>
 
       <div className="camera-layout">
+        <div className={`hud-card ${telemetry.tone}`}>
+          <div className="hud-text-content">
+            <div className="hud-instruction">{telemetry.hint}</div>
+          </div>
+          <LivenessInstructionAnimation stepType={activeChallengeType} />
+        </div>
+
         <div ref={viewportRef} className="viewport">
           <video ref={videoRef} autoPlay playsInline muted />
           <canvas ref={overlayRef} />
           <div className={`oval-guide ${telemetry.tone === "success" ? "ready" : telemetry.tone === "error" ? "error" : "tracking"}`} />
           
-          <div className={`hud-card ${telemetry.tone}`}>
-            <div className="hud-eyebrow">{telemetry.status}</div>
-            <div className="hud-instruction">{telemetry.hint}</div>
-          </div>
-
           {blockingMessage ? (
             <div className="blocking-overlay" role="status" aria-live="polite">
               <div className="spinner" />
@@ -1192,12 +1265,38 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           ) : null}
         </div>
 
-        <LivenessInstructionAnimation stepType={activeChallengeType} />
-
         <div className="camera-controls">
-          <button type="button" className="ghost-btn cancel-btn" onClick={onStop}>
+          <button type="button" className="ghost-btn cancel-btn" onClick={handleCancelClick}>
             Hủy bỏ
           </button>
+          {showCancelConfirm && (
+            <div className="confirm-modal-overlay" role="dialog" aria-modal="true">
+              <div className="confirm-modal-content">
+                <div className="confirm-modal-text">
+                  {confirmText}
+                </div>
+                <div className="confirm-modal-actions">
+                  <button
+                    type="button"
+                    className="confirm-btn-stay"
+                    onClick={resumeSession}
+                  >
+                    {confirmBtnStayText}
+                  </button>
+                  <button
+                    type="button"
+                    className="confirm-btn-leave"
+                    onClick={() => {
+                      setShowCancelConfirm(false);
+                      onStop?.();
+                    }}
+                  >
+                    {confirmBtnLeaveText}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <button type="button" className="ghost-btn debug-toggle-btn" onClick={() => setShowDebug(!showDebug)}>
             {showDebug ? "Ẩn debug" : "Hiện debug"}
           </button>

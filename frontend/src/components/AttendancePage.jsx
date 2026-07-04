@@ -64,12 +64,7 @@ export default function AttendancePage({ defaultStudentId }) {
 
               {result.reason ? <p>Lý do: {result.reason}</p> : null}
             </article>
-          ) : (
-            <article className="empty-state">
-              <h3>Phiên điểm danh chưa bắt đầu</h3>
-              <p>Hệ thống camera sẽ mở khi bạn bấm nút bên dưới và tự động đóng sau khi có kết quả.</p>
-            </article>
-          )}
+          ) : null}
           <button
             className="primary-btn"
             type="button"
