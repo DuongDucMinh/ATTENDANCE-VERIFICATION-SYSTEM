@@ -3,7 +3,7 @@ import AttendancePage from "./components/AttendancePage";
 import ProfilePage from "./components/ProfilePage";
 
 const NAV_ITEMS = [
-  { key: "profile", label: "Hồ sơ" },
+  { key: "profile", label: "Đăng ký" },
   { key: "attendance", label: "Điểm danh" },
 ];
 
@@ -27,10 +27,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="top-bar">
+      <header className="top-bar" style={{ justifyContent: "center" }}>
         <div className="brand-title">
-          <span className="brand-logo">⚡</span>
-          <h2>Edge-AI Attendance</h2>
+          <h2>Face Verify Attendance</h2>
         </div>
       </header>
 
@@ -56,7 +55,7 @@ export default function App() {
             onClick={() => setActiveTab(item.key)}
           >
             <span className="nav-icon">
-              {item.key === "profile" ? "👤" : "✅"}
+              {item.key === "profile" ? "📝" : "✅"}
             </span>
             <span className="nav-label">{item.label}</span>
           </button>
