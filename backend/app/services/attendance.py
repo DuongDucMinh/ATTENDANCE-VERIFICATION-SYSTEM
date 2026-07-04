@@ -198,7 +198,30 @@ class AttendanceService:
         best_sample_score = sample_scores[0]
         top_k_score = float(np.mean(sample_scores[:2]))
         pose_weighted_score = POSE_SCORE_WEIGHT * top_k_score + CENTROID_SCORE_WEIGHT * centroid_score
-        raw_match_score = max(best_sample_score, pose_weighted_score)
+
+        probe_pose = capture_meta_dict.get("pose_label", "front")
+        direct_sample = next((s for s in samples if s.pose_label == probe_pose), None)
+
+        is_adaptive = False
+        direct_score = 0.0
+        mean_other_score = 0.0
+        cross_threshold = 0.48
+
+        if direct_sample and len(samples) >= 3:
+            is_adaptive = True
+            direct_embedding = normalize_vector(np.asarray(direct_sample.embedding, dtype=np.float32))
+            direct_score = cosine_similarity(probe_embedding, direct_embedding)
+            other_samples = [s for s in samples if s.pose_label != probe_pose]
+            other_scores = [cosine_similarity(probe_embedding, normalize_vector(np.asarray(s.embedding, dtype=np.float32))) for s in other_samples]
+            mean_other_score = float(np.mean(other_scores)) if other_scores else 0.0
+
+            if mean_other_score >= cross_threshold:
+                raw_match_score = direct_score
+            else:
+                raw_match_score = direct_score * (mean_other_score / cross_threshold)
+        else:
+            raw_match_score = max(best_sample_score, pose_weighted_score)
+
         final_score = round(min(0.99, raw_match_score), 3)
 
         decision_breakdown = {
@@ -212,6 +235,10 @@ class AttendanceService:
             "registered_sample_count": len(samples),
             "threshold": settings.similarity_threshold,
             "final_score": final_score,
+            "is_adaptive": is_adaptive,
+            "direct_score": round(direct_score, 3),
+            "mean_other_score": round(mean_other_score, 3),
+            "cross_threshold": cross_threshold,
         }
         log_meta = {
             "challenge_sequence": capture_meta_dict.get("challenge_sequence", []),
