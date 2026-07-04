@@ -389,20 +389,34 @@ button:disabled {
 }
 
 .hud-card {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  height: 120px;
   background: rgba(8, 18, 34, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  padding: 10px 14px;
+  border-radius: 16px;
+  padding: 0 0 0 20px;
   backdrop-filter: blur(8px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   z-index: 5;
-  text-align: center;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   pointer-events: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.hud-text-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  flex: 1;
+  padding: 16px 0;
+  padding-right: 12px;
 }
 
 .hud-card.success {
@@ -421,19 +435,55 @@ button:disabled {
 }
 
 .hud-eyebrow {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-family: "IBM Plex Mono", monospace;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   text-transform: uppercase;
 }
 
 .hud-instruction {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1.35rem;
+  font-weight: 700;
   line-height: 1.35;
   color: #fff;
+  text-transform: uppercase;
+}
+
+/* Embedded animation styling inside the top notification box */
+.hud-card .liveness-feedback-area {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  min-height: auto;
+  box-shadow: none;
+  width: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-card .anim-container {
+  width: 120px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-card .anim-svg {
+  width: 100%;
+  height: 100%;
+  transform: scale(1.15);
+  transform-origin: center;
+}
+
+.hud-card .anim-turn-right {
+  transform: scale(1.15) translateX(-5px);
 }
 
 .camera-controls {
@@ -611,11 +661,11 @@ button:disabled {
 
 @keyframes head-move-l {
   0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(-4px); }
+  50% { transform: translateX(-6px); }
 }
 @keyframes face-turn-l {
-  0%, 100% { transform: translateX(0) scaleX(1); opacity: 1; }
-  50% { transform: translateX(-12px) scaleX(0.85); opacity: 0.8; }
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  50% { transform: translateX(-15px) scaleX(0.75); }
 }
 
 .anim-turn-right .parallax-head {
@@ -631,11 +681,11 @@ button:disabled {
 
 @keyframes head-move-r {
   0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(4px); }
+  50% { transform: translateX(6px); }
 }
 @keyframes face-turn-r {
-  0%, 100% { transform: translateX(0) scaleX(1); opacity: 1; }
-  50% { transform: translateX(12px) scaleX(0.85); opacity: 0.8; }
+  0%, 100% { transform: translateX(0) scaleX(1); }
+  50% { transform: translateX(15px) scaleX(0.75); }
 }
 
 /* Mouth animations */
@@ -661,8 +711,8 @@ button:disabled {
 }
 
 @keyframes eye-blink {
-  0%, 90%, 100% { transform: scaleY(1); }
-  93%, 97% { transform: scaleY(0.08); }
+  0%, 80%, 100% { transform: scaleY(1); }
+  88%, 92% { transform: scaleY(0.08); }
 }
 
 /* Focus corners animation */
@@ -679,4 +729,90 @@ button:disabled {
 @keyframes focus-pulse {
   0%, 100% { transform: scale(1); opacity: 0.7; stroke: #ffd449; }
   50% { transform: scale(0.95); opacity: 1; stroke: #79efb3; }
+}
+
+/* Confirm modal dialog styling */
+.confirm-modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding: 24px;
+  background: rgba(4, 10, 20, 0.85);
+  backdrop-filter: blur(12px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.confirm-modal-content {
+  background: rgba(15, 29, 49, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 24px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  transform: translateY(0);
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.confirm-modal-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff;
+  margin-bottom: 24px;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+}
+
+.confirm-modal-actions button {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.confirm-btn-stay {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.confirm-btn-stay:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.confirm-btn-leave {
+  background: #ff4d4d;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(255, 77, 77, 0.25);
+}
+
+.confirm-btn-leave:hover {
+  background: #ff3333;
+  transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(15px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }

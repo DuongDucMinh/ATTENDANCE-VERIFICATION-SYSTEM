@@ -23,6 +23,7 @@ export const FRAME_CONFIG = {
 export const THRESHOLDS = {
   session: {
     alignmentHoldMs: 1000,
+    alignmentTimeoutMs: 15000,
     poseHoldMs: 400,
     verifyStepTimeoutMs: 15000,
     verifySessionTimeoutMs: 30000,
@@ -69,7 +70,7 @@ export const THRESHOLDS = {
   },
 };
 
-export const VERIFY_CHALLENGE_POOL = ["blink_twice", "turn_left_hold", "turn_right_hold", "open_mouth"];
+export const VERIFY_CHALLENGE_POOL = ["blink_once", "turn_left_hold", "turn_right_hold", "open_mouth"];
 
 export const REGISTER_POSE_STEPS = [
   {

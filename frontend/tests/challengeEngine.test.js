@@ -10,6 +10,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: 0, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: false,
     });
@@ -19,6 +20,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: 0, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: true,
     });
@@ -31,6 +33,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: -16, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: false,
     });
@@ -40,6 +43,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: -16, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: false,
     });
@@ -52,6 +56,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: 17, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: false,
     });
@@ -61,6 +66,7 @@ describe("challenge engine", () => {
       centerCheck: true,
       turnCenterCheck: true,
       sizeCheck: true,
+      sizeRatio: 0.7,
       pose: { yawAngle: 17, rollAngle: 0, pitchAngle: 0 },
       blinkDetected: false,
     });

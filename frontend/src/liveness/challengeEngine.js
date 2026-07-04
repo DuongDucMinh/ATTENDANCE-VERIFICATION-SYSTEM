@@ -24,8 +24,8 @@ export function createChallengeSteps(mode) {
     type,
     timeoutMs: verifyStepTimeoutMs,
     prompt:
-      type === "blink_twice"
-        ? "Chớp mắt 2 lần"
+      type === "blink_once" || type === "blink_twice"
+        ? "Chớp mắt 1 lần"
         : type === "turn_left_hold"
           ? "Quay mặt sang bên Trái"
           : type === "turn_right_hold"
