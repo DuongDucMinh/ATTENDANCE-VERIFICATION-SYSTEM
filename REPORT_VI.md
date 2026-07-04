@@ -57,24 +57,30 @@ $$\text{mouth\_open\_ratio} = \frac{\text{distance}(upper\_lip, lower\_lip)}{\te
 
 Khi sinh viên đăng ký, hệ thống yêu cầu lưu đúng 3 mẫu tư thế ảnh: thẳng (`front`), nghiêng trái (`left`), nghiêng phải (`right`). 
 
-Khi điểm danh, Server thực hiện so khớp ảnh gửi lên (`probe`) với 3 mẫu đăng ký theo thuật toán **Hybrid Similarity** (Độ tương đồng hỗn hợp):
-1. **Tính các điểm tương đồng riêng lẻ**:
-   * $S_{front} = \text{cosine}(probe, front)$
-   * $S_{left} = \text{cosine}(probe, left)$
-   * $S_{right} = \text{cosine}(probe, right)$
-2. **Tính điểm so khớp Trọng tâm (Centroid Score)**:
-   * Tạo vector trọng tâm bằng trung bình cộng 3 mẫu đăng ký:
-     $$Centroid = \text{normalize}\left(\frac{front + left + right}{3}\right)$$
-   * Điểm centroid: $S_{centroid} = \text{cosine}(probe, Centroid)$
-3. **Tính điểm Top-K (K=2)**:
-   * Lấy trung bình cộng của 2 điểm số cao nhất trong tập $\{S_{front}, S_{left}, S_{right}\}$:
-     $$S_{top2} = \text{mean}(\text{sorted}(\{S_{front}, S_{left}, S_{right}\})[:2])$$
-4. **Tính điểm kết hợp (Pose Weighted Score)**:
-   * Kết hợp điểm Top-K (trọng số 0.7) và điểm Centroid (trọng số 0.3):
-     $$S_{weighted} = 0.7 \times S_{top2} + 0.3 \times S_{centroid}$$
-5. **Điểm quyết định cuối cùng (Final Score)**:
-   * Lấy giá trị lớn nhất giữa điểm đơn lẻ tốt nhất và điểm kết hợp, sau đó chặn trên ở mức $0.99$:
-     $$\text{final\_score} = \text{min}\left(0.99, \text{max}(\text{max}(\{S_{front}, S_{left}, S_{right}\}), S_{weighted})\right)$$
+Khi điểm danh, Server thực hiện so khớp ảnh gửi lên (`probe`) với 3 mẫu đăng ký theo thuật toán **Adaptive Pose-Matching with Penalty** (So khớp tư thế thích ứng có phạt):
+
+1. **So khớp trực tiếp (Direct Matching)**:
+   * Lấy ảnh đăng ký có cùng tư thế với ảnh điểm danh (ảnh điểm danh có `pose_label` là `front`, ta so khớp nó với ảnh đăng ký `front` trong cơ sở dữ liệu).
+   * Điểm tương đồng trực tiếp: 
+     $$S_{direct} = \text{cosine}(probe, front)$$
+
+2. **Xác thực chéo chống giả mạo (Cross-Verification)**:
+   * So khớp ảnh điểm danh với 2 ảnh đăng ký góc nghiêng (`left` và `right`):
+     $$S_{left} = \text{cosine}(probe, left)$$
+     $$S_{right} = \text{cosine}(probe, right)$$
+   * Tính điểm chéo trung bình:
+     $$S_{cross} = \text{mean}(\{S_{left}, S_{right}\})$$
+
+3. **Tính điểm quyết định cuối cùng (Final Score)**:
+   * Hệ thống áp dụng một ngưỡng chéo tối thiểu $T_{cross} = 0.48$ để xác minh tính nhất quán cấu trúc 3D của khuôn mặt (tránh việc dùng ảnh thẳng giả mạo hoặc người khác):
+     * Nếu $S_{cross} \ge 0.48$:
+       $$\text{final\_score} = S_{direct}$$
+       (Giữ nguyên điểm số trực diện cực cao của sinh viên hợp lệ, không bị kéo thấp bởi các ảnh nghiêng).
+     * Nếu $S_{cross} < 0.48$:
+       $$\text{final\_score} = S_{direct} \times \frac{S_{cross}}{0.48}$$
+       (Áp dụng hình phạt giảm điểm số tỷ lệ thuận để đánh trượt).
+   * Trường hợp dữ liệu cũ (sinh viên chưa đăng ký đủ 3 góc mặt), hệ thống tự động fallback về thuật toán tính hybrid cũ:
+     $$\text{final\_score} = \text{min}\left(0.99, \text{max}(S_{best}, S_{weighted})\right)$$
 
 Hệ thống quyết định sinh viên điểm danh thành công nếu $\text{final\_score} \ge \text{SIMILARITY\_THRESHOLD}$ (mặc định là $0.7$, cấu hình được trong tệp `.env`).
 
@@ -87,10 +93,12 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
 | Nhóm tham số | Tên tham số | Giá trị mặc định | Mô tả |
 | :--- | :--- | :--- | :--- |
 | **Session** | `alignmentHoldMs` | `1000` ms | Thời gian giữ mặt thẳng ổn định để bắt đầu phiên. |
+| | `alignmentTimeoutMs` | `15000` ms | Thời gian tối đa để hoàn thành căn chỉnh khuôn mặt ban đầu. |
 | | `poseHoldMs` | `400` ms | Thời gian giữ tư thế nghiêng hoặc há miệng để pass bước thử thách. |
-| | `verifyStepTimeoutMs` | `10000` ms | Thời gian tối đa để hoàn thành một bước thử thách liveness (đã nâng lên 10s). |
-| | `verifySessionTimeoutMs` | `20000` ms | Thời gian tối đa của toàn bộ phiên điểm danh. |
-| | `verifyStabilityTimeoutMs`| `10000` ms | Thời gian chờ tối đa cho bước căn chỉnh ban đầu. |
+| | `verifyStepTimeoutMs` | `15000` ms | Thời gian tối đa để hoàn thành một bước thử thách liveness. |
+| | `verifySessionTimeoutMs` | `30000` ms | Thời gian tối đa của toàn bộ phiên điểm danh. |
+| | `verifyStabilityTimeoutMs`| `15000` ms | Thời gian chờ tối đa cho bước chụp ảnh thẳng ổn định sau thử thách (Stability Timeout). |
+| | `registerSessionTimeoutMs`| `30000` ms | Thời gian tối đa của toàn bộ phiên đăng ký. |
 | **Blink** | `minBaselineEar` | `0.16` | EAR cơ bản tối thiểu để nhận diện mắt bình thường. |
 | | `closeFloorEar` | `0.12` | Ngưỡng EAR xác định mắt nhắm. |
 | | `recoverFloorEar` | `0.16` | Ngưỡng EAR xác định mắt mở lại sau khi chớp. |

@@ -11,9 +11,9 @@ Hệ thống điểm danh sinh viên bằng khuôn mặt thông minh, tích hợ
    - Chuỗi thử thách ngẫu nhiên 2 bước (Chớp mắt, quay trái, quay phải, há miệng) nhằm ngăn chặn các hành vi gian lận bằng ảnh chụp, video hoặc mặt nạ.
    - Cơ chế tự động chấm điểm chất lượng ảnh (độ mờ, độ sáng) và chọn khung hình tối ưu trước khi gửi về Server.
 
-2. **Thuật toán nhận dạng nâng cao (Hybrid Face Similarity)**:
+2. **Thuật toán nhận dạng nâng cao (Adaptive Pose-Matching with Penalty)**:
    - Sử dụng mô hình học sâu **InsightFace** (buffalo_s) chạy trên môi trường **ONNX Runtime** để trích xuất và so khớp đặc trưng vector khuôn mặt (512 chiều).
-   - Áp dụng công thức so khớp hỗn hợp (Hybrid Similarity) kết hợp điểm so khớp của góc ảnh thẳng (`front`), góc nghiêng (`left`, `right`) và vector trọng tâm (`centroid`) để tối đa hóa độ chính xác.
+   - Áp dụng thuật toán so khớp tư thế thích ứng có phạt (Adaptive Pose-Matching with Penalty) so khớp trực tiếp ảnh điểm danh với ảnh đăng ký cùng tư thế (`front`), đồng thời xác thực chéo với các ảnh góc nghiêng (`left`, `right`) nhằm chống giả mạo 3D mà không làm giảm điểm tương đồng của sinh viên hợp lệ.
 
 3. **Trải nghiệm UX/UI và Tương thích Di động (Mobile Audio Autoplay)**:
    - Giao diện và giọng nói điều hướng 100% Tiếng Việt có dấu, giúp sinh viên dễ dàng làm theo các thao tác.
@@ -61,7 +61,7 @@ flowchart TD
     C --> D["Vượt qua thử thách"]
     D --> E["Quay về góc mặt thẳng (nhìn thẳng camera)"]
     E --> F["Chụp loạt ảnh thẳng tốt nhất (Neutral Capture)"]
-    F --> G["Backend tính điểm Hybrid Similarity"]
+    F --> G["Backend tính điểm Adaptive Pose-Matching với Cross Penalty"]
     G --> H{"Điểm số >= Ngưỡng?"}
     H -- "Có" --> I["Điểm danh THÀNH CÔNG"]
     H -- "Không" --> J["Điểm danh THẤT BẠI"]
