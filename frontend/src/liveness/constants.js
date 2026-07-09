@@ -83,14 +83,14 @@ export const REGISTER_POSE_STEPS = [
   {
     id: "left",
     type: "turn_left_hold",
-    prompt: "Quay mặt sang bên Trái",
+    prompt: "Quay mặt sang bên trái",
     poseTarget: "left",
     timeoutMs: 15000,
   },
   {
     id: "right",
     type: "turn_right_hold",
-    prompt: "Quay mặt sang bên Phải",
+    prompt: "Quay mặt sang bên phải",
     poseTarget: "right",
     timeoutMs: 15000,
   },
