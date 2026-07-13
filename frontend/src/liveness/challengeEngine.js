@@ -27,9 +27,9 @@ export function createChallengeSteps(mode) {
       type === "blink_once" || type === "blink_twice"
         ? "Chớp mắt 1 lần"
         : type === "turn_left_hold"
-          ? "Quay mặt sang bên trái"
+          ? "Quay mặt sang trái"
           : type === "turn_right_hold"
-            ? "Quay mặt sang bên phải"
+            ? "Quay mặt sang phải"
             : "Há miệng rộng",
     poseTarget: type === "turn_left_hold" ? "left" : type === "turn_right_hold" ? "right" : "front",
   }));
