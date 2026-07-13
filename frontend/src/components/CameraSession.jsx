@@ -168,7 +168,7 @@ function LivenessInstructionAnimation({ stepType }) {
       case "turn_left_hold":
         return (
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-left">
-            <path className="arrow-left" d="M 28,50 L 8,50 M 16,42 L 8,50 L 16,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path className="arrow-left" d="M 22,50 L 2,50 M 10,42 L 2,50 L 10,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <g className="parallax-head">
               <circle className="head-circle" cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
               <g className="face-features">
@@ -183,7 +183,7 @@ function LivenessInstructionAnimation({ stepType }) {
       case "turn_right_hold":
         return (
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="anim-svg anim-turn-right">
-            <path className="arrow-right" d="M 72,50 L 92,50 M 84,42 L 92,50 L 84,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path className="arrow-right" d="M 78,50 L 98,50 M 90,42 L 98,50 L 90,58" stroke="#ffd449" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             <g className="parallax-head">
               <circle className="head-circle" cx="50" cy="50" r="26" fill="rgba(255,255,255,0.06)" stroke="#f3f1ea" strokeWidth="2.5" />
               <g className="face-features">
@@ -268,7 +268,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
   const [telemetry, setTelemetry] = useState({
     status: "Chờ bắt đầu",
-    hint: "Thông báo: Bấm bắt đầu để mở camera.",
+    hint: "Thông báo: bấm bắt đầu để mở camera.",
     tone: "info",
   });
   const [debugState, setDebugState] = useState({
@@ -805,7 +805,7 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         setTelemetry((current) => ({
           ...current,
           status: mode === "register" ? "Dang dang ky khuon mat" : "Dang diem danh",
-          hint: "không thấy khuôn mặt trong camera",
+          hint: "Không thấy khuôn mặt trong camera",
           tone: "error",
         }));
         return;
@@ -982,17 +982,17 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
 
           setTelemetry({
             status: "Đang điểm danh",
-            hint: `Thử thách đã đạt. Giữ mặt thẳng thêm ${(remainingMs / 1000).toFixed(1)}s để chụp ảnh xác nhận.`,
+            hint: `Giữ mặt thẳng thêm ${(remainingMs / 1000).toFixed(1)}s để chụp ảnh xác nhận.`,
             tone: "success",
           });
           return;
         }
 
         state.neutralCaptureStartedAt = null;
-        let neutralHint = "Quay về mắt thẳng, nhìn vào camera và giữ khuôn mặt ổn định để chụp ảnh xác nhận.";
+        let neutralHint = "Nhìn vào camera và giữ khuôn mặt ổn định để chụp ảnh xác nhận.";
         let neutralTone = "info";
         if (!alignment.centerCheck) {
-          neutralHint = "Đưa mặt vào giữa khung để chụp ảnh xác nhận.";
+          neutralHint = "Đưa mặt vào giữa khung.";
           neutralTone = "error";
         } else if (!alignment.sizeCheck) {
           neutralHint =
@@ -1258,7 +1258,14 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
           
           {blockingMessage ? (
             <div className="blocking-overlay" role="status" aria-live="polite">
-              <div className="spinner" />
+              <div className="biometric-loader">
+                <div className="scanner-frame">
+                  <div className="scanner-line"></div>
+                  <svg className="face-outline-svg" viewBox="0 0 100 100">
+                    <path d="M25,35 Q25,20 50,20 Q75,20 75,35 Q75,55 50,80 Q25,55 25,35 Z" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray="4 4" />
+                  </svg>
+                </div>
+              </div>
               <strong>{blockingMessage}</strong>
               <span>Vui lòng giữ nguyên trang cho tới khi có kết quả.</span>
             </div>
@@ -1266,9 +1273,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
         </div>
 
         <div className="camera-controls">
+          {/* Tạm ẩn button "Hủy bỏ" */}
+          {/*
           <button type="button" className="ghost-btn cancel-btn" onClick={handleCancelClick}>
             Hủy bỏ
           </button>
+          */}
           {showCancelConfirm && (
             <div className="confirm-modal-overlay" role="dialog" aria-modal="true">
               <div className="confirm-modal-content">
@@ -1297,9 +1307,12 @@ export default function CameraSession({ mode, studentId, active, onComplete, onS
               </div>
             </div>
           )}
+          {/* Tạm ẩn button "Hiện debug" */}
+          {/*
           <button type="button" className="ghost-btn debug-toggle-btn" onClick={() => setShowDebug(!showDebug)}>
             {showDebug ? "Ẩn debug" : "Hiện debug"}
           </button>
+          */}
         </div>
 
         {showDebug && (
