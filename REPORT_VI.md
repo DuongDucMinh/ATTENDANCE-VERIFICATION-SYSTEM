@@ -146,3 +146,14 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
   - Xây dựng cơ chế `unlockAndPreloadAudio`: Khi sinh viên vừa nhấn nút "Bắt Đầu", hệ thống lập tức lặp qua toàn bộ file âm thanh, thiết lập `volume = 0` và gọi `.play()` rồi `.pause()`. Thao tác này "mở khóa" quyền phát âm thanh cho các phần tử này trong toàn bộ phiên làm việc.
   - Áp dụng logic dừng toàn bộ âm thanh cũ trước khi phát âm thanh mới để tránh chồng chéo.
 * **Hiệu quả**: Đảm bảo 100% âm thanh điều hướng được phát mượt mà, đồng bộ và rõ ràng trên mọi thiết bị di động cũng như máy tính để bàn.
+
+### 5.5 Cải tiến UI/UX & Motion nâng cao cho Liveness Animation
+* **Vấn đề**:
+  - Hoạt ảnh 4 góc khung định vị khuôn mặt (`focus-corner`) sử dụng hiệu ứng thay đổi độ mờ liên tục (`focus-pulse`) tạo cảm giác chuyển động chậm, đôi khi không thu hút sự chú ý của người dùng để thực hiện căn chỉnh nhanh.
+  - Các mũi tên hướng dẫn quay trái/phải (`arrow-left`, `arrow-right`) khi dao động (bounce) di chuyển quá sát và đè lên khuôn mặt đồ họa ở trung tâm, gây cảm giác chồng chéo hình ảnh. Ngoài ra, do giới hạn bởi kích thước SVG (`viewBox="0 0 100 100"`), các mũi tên khi di chuyển tới sát rìa ngoài cùng thường bị trình duyệt cắt mất một góc vẽ (clipping).
+* **Giải pháp**:
+  - **Khung góc nhấp nháy cơ học**: Thay thế animation `focus-pulse` cũ bằng hiệu ứng `focus-blink` với tốc độ chu kỳ ngắn `0.8s` sử dụng `steps(1, start)` tạo cảm giác nhấp nháy cơ học (toggle opacity đột ngột giữa `0.2` và `1`), giúp thu hút sự chú ý hiệu quả hơn.
+  - **Dịch chuyển toạ độ mũi tên**: Thay đổi dịch chuyển hệ số toạ độ `x` của nét vẽ vector trong SVG của hai mũi tên ra ngoài rìa xa hơn 6 đơn vị (ví dụ, dịch đuôi mũi tên trái từ `28` về `22`, và đuôi mũi tên phải từ `72` lên `78`) để tạo khoảng cách an toàn với khuôn mặt giả lập.
+  - **Khắc phục lỗi cắt nét vẽ (Clipping)**: Thêm thuộc tính CSS `overflow: visible !important;` trên lớp `.anim-svg` để trình duyệt cho phép hiển thị các phần tử con trượt ra ngoài vùng chứa vector. Đồng thời điều chỉnh padding của thẻ chứa `.hud-card` thêm khoảng đệm bên phải (`padding: 0 16px 0 20px` thay vì `0 0 0 20px`) để không bị cắt bởi thuộc tính `overflow: hidden` của thẻ HUD card.
+* **Hiệu quả**: Hoạt ảnh chỉ dẫn liveness chuyển động mượt mà, định vị chính xác, không bị đè nét vẽ hay mất chi tiết ở rìa biên trên cả thiết bị di động và máy tính.
+

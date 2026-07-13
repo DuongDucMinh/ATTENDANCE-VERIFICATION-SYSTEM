@@ -18,6 +18,9 @@ Hệ thống điểm danh sinh viên bằng khuôn mặt thông minh, tích hợ
 3. **Trải nghiệm UX/UI và Tương thích Di động (Mobile Audio Autoplay)**:
    - Giao diện và giọng nói điều hướng 100% Tiếng Việt có dấu, giúp sinh viên dễ dàng làm theo các thao tác.
    - Xử lý thông minh chính sách bảo mật Audio Autoplay của iOS/Android bằng kỹ thuật Unlock Audio qua tương tác người dùng (`unlockAndPreloadAudio`), đảm bảo âm thanh phát mượt mà, không bị chồng chéo.
+   - **Tối ưu hóa UI/UX & Motion**:
+     * Thiết lập hiệu ứng 4 góc định vị khuôn mặt thành dạng **nhấp nháy cơ học (blinking)** rõ nét với tần số `0.8s` (sử dụng `steps(1, start)`) thay vì rõ dần/mờ dần, giúp người dùng tập trung căn chỉnh hơn.
+     * Cải tiến mũi tên hướng dẫn tư thế (quay trái/phải) dịch chuyển xa khuôn mặt hơn tránh xung đột đè nét vẽ khi chuyển động, cấu hình `overflow: visible` cho SVG để mũi tên trượt mượt mà không bị cắt rìa.
 
 4. **Tối ưu hóa hiệu năng & Băng thông**:
    - **Tải trước tài nguyên (Preload & Warmup)**: Khởi tạo sớm (warm up) đối tượng MediaPipe FaceMesh ngầm thông qua CDN ngay khi tải trang, giúp xóa bỏ hoàn toàn độ trễ 3-5 giây chờ tải mô hình khi người dùng mở camera điểm danh.
