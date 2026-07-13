@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import CameraSession, { unlockAndPreloadAudio } from "./CameraSession";
-import { fetchRuntimeConfig } from "../lib/api";
+import { fetchRuntimeConfig, fetchProfile } from "../lib/api";
 
 export default function AttendancePage({ defaultStudentId }) {
   const [studentId, setStudentId] = useState(defaultStudentId || "");
+  const [studentName, setStudentName] = useState("");
   const [activeSession, setActiveSession] = useState(false);
   const [result, setResult] = useState(null);
   const [runtimeConfig, setRuntimeConfig] = useState(null);
-  const decision = result?.meta?.decision_breakdown || null;
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +25,12 @@ export default function AttendancePage({ defaultStudentId }) {
     };
   }, []);
 
+  const handleStartAttendance = () => {
+    unlockAndPreloadAudio();
+    setResult(null);
+    setActiveSession(true);
+  };
+
   if (activeSession) {
     return (
       <CameraSession
@@ -32,9 +38,21 @@ export default function AttendancePage({ defaultStudentId }) {
         studentId={studentId}
         active={activeSession}
         onStop={() => setActiveSession(false)}
-        onComplete={(sessionResult) => {
+        onComplete={async (sessionResult) => {
           setResult(sessionResult);
           setActiveSession(false);
+          if (sessionResult) {
+            try {
+              const profile = await fetchProfile(studentId.trim());
+              if (profile && profile.full_name) {
+                setStudentName(profile.full_name);
+              } else {
+                setStudentName("Không tìm thấy");
+              }
+            } catch (err) {
+              setStudentName("Không tìm thấy");
+            }
+          }
         }}
       />
     );
@@ -44,39 +62,55 @@ export default function AttendancePage({ defaultStudentId }) {
     <div className="page-grid single">
       <section className="panel">
         <div className="panel-heading">
-          <h2>Điểm danh</h2>
-
+          <h2 className="panel-title">Điểm danh</h2>
         </div>
 
-        <label className="inline-field" style={{ marginTop: '16px' }}>
-          <span>Mã sinh viên</span>
-          <input value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="2026_SV01" />
-        </label>
+        {result ? (
+          <div style={{ textAlign: "center", marginBottom: "20px", display: "flex", flexDirection: "column", gap: "6px", color: "var(--text)" }}>
+            <p style={{ margin: 0, fontSize: "1rem" }}>Mã sinh viên: <strong style={{ fontWeight: "700" }}>{studentId}</strong></p>
+            <p style={{ margin: 0, fontSize: "1rem" }}>Họ và tên: <strong style={{ fontWeight: "700" }}>{studentName || "--"}</strong></p>
+          </div>
+        ) : (
+          <div style={{ marginBottom: "20px" }}>
+            <label className="inline-field">
+              <span style={{ fontWeight: "600", fontSize: "0.95rem" }}>Mã sinh viên</span>
+              <input
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
+                placeholder="ví dụ: 12345"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="result-shell">
           {result ? (
             <article className={`result-card ${result.ok ? "success" : "error"}`}>
-              <h3>{result.ok ? "Điểm danh thành công" : "Điểm danh thất bại"}</h3>
-              <p>Mã sinh viên: {result.studentId}</p>
-              <p>Thời gian: {new Date(result.createdAt).toLocaleString("vi-VN")}</p>
-              {typeof result.score === "number" ? <p>Điểm hybrid similarity: {result.score.toFixed(3)}</p> : null}
-              {typeof decision?.threshold === "number" ? <p>Ngưỡng: {decision.threshold.toFixed(3)}</p> : null}
-
-              {result.reason ? <p>Lý do: {result.reason}</p> : null}
+              <h3 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "6px" }}>
+                {result.ok ? "Điểm danh thành công" : "Điểm danh thất bại"}
+              </h3>
+              <p style={{ margin: "0 0 6px 0", fontSize: "0.85rem", opacity: 0.8 }}>
+                Thời gian: {new Date(result.createdAt || Date.now()).toLocaleString("vi-VN")}
+              </p>
+              {result.reason ? (
+                <p style={{ margin: "6px 0 0 0", borderTop: "1px dashed rgba(220, 38, 38, 0.15)", paddingTop: "6px" }}>
+                  Lý do: {result.reason}
+                </p>
+              ) : null}
             </article>
-          ) : null}
-          <button
-            className="primary-btn"
-            type="button"
-            disabled={!studentId.trim()}
-            onClick={() => {
-              unlockAndPreloadAudio();
-              setResult(null);
-              setActiveSession(true);
-            }}
-          >
-            Bắt đầu điểm danh
-          </button>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <button
+                className="primary-btn"
+                type="button"
+                disabled={!studentId.trim()}
+                onClick={handleStartAttendance}
+                style={{ width: "70%", justifyContent: "center" }}
+              >
+                Bắt đầu điểm danh
+              </button>
+            </div>
+          )}
         </div>
       </section>
     </div>
