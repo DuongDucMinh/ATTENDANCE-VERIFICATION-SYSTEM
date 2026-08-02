@@ -72,47 +72,78 @@ flowchart TD
 
 ---
 
-## 💻 Hướng dẫn chạy local
+## 💻 Hướng dẫn chạy dự án
 
-### 1. Khởi động Cơ sở dữ liệu (PostgreSQL + pgvector)
-Dự án được cấu hình mặc định sử dụng PostgreSQL. Bạn có thể khởi chạy nhanh container DB bằng Docker Compose:
-```bash
-docker compose up -d
-```
+### Phương pháp 1: Khởi chạy bằng Docker Compose (Khuyên dùng)
+Đây là cách nhanh nhất và đơn giản nhất để chạy toàn bộ hệ thống (Frontend, Backend, Database) đồng bộ chỉ với một câu lệnh mà không cần cài đặt môi trường Python hay Node.js cục bộ:
 
-### 2. Cấu hình & Chạy Backend
-* Tạo môi trường ảo và cài đặt thư viện:
-  ```bash
-  python -m venv .venv
-  # Windows
-  .\.venv\Scripts\activate
-  # Linux/macOS
-  source .venv/bin/activate
-  
-  pip install -r requirements.txt
-  ```
-* Tạo tệp cấu hình `.env` ở thư mục gốc của dự án (sử dụng các cấu hình từ tệp mẫu `.env.example`):
-  ```env
-  DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/attendance_verification
-  SIMILARITY_THRESHOLD=0.7
-  UPLOADS_DIR=backend/data/face_images
-  ```
-* Khởi chạy FastAPI Backend:
-  ```bash
-  python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-  ```
+1. **Khởi chạy hệ thống**:
+   Đứng tại thư mục gốc của dự án và chạy:
+   ```bash
+   docker compose up --build
+   ```
+   *(Lưu ý: Trong lần khởi chạy đầu tiên, container Backend sẽ tự động tải các file mô hình `.onnx` của InsightFace từ internet về và lưu trữ vào Docker Volume. Các lần chạy sau sẽ khởi động ngay lập tức mà không cần tải lại).*
 
-### 3. Cài đặt & Chạy Frontend
-* Di chuyển vào thư mục `frontend` và cài đặt các gói NPM:
-  ```bash
-  cd frontend
-  npm install
-  ```
-* Khởi chạy Vite Dev Server:
-  ```bash
-  npm run dev
-  ```
-* Mở trình duyệt truy cập: `http://localhost:5173`. Vite sẽ tự động proxy các request có đường dẫn `/api/*` sang máy chủ backend đang chạy ở port `8000`.
+2. **Chạy ngầm (Chạy nền)**:
+   Nếu muốn chạy ngầm hệ thống để giải phóng cửa sổ terminal:
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Truy cập ứng dụng**:
+   * Frontend: Mở trình duyệt truy cập `http://localhost:5173`.
+   * Backend API Docs: Truy cập `http://localhost:8000/docs` để xem Swagger UI của FastAPI.
+
+4. **Dừng hệ thống**:
+   ```bash
+   docker compose down
+   ```
+   *(Dữ liệu cơ sở dữ liệu và các file mô hình đã tải về vẫn được bảo toàn nguyên vẹn trên máy thật của bạn thông qua các Docker Volume).*
+
+---
+
+### Phương pháp 2: Chạy cục bộ thủ công (Manual Setup)
+Sử dụng phương pháp này nếu bạn muốn chạy từng dịch vụ riêng biệt không qua container:
+
+1. **Khởi động Cơ sở dữ liệu (PostgreSQL + pgvector)**:
+   Bạn vẫn có thể tận dụng Docker Compose chỉ để khởi động nhanh database:
+   ```bash
+   docker compose up -d postgres
+   ```
+
+2. **Cấu hình & Chạy Backend**:
+   * Tạo môi trường ảo và cài đặt thư viện:
+     ```bash
+     python -m venv .venv
+     # Windows
+     .\.venv\Scripts\activate
+     # Linux/macOS
+     source .venv/bin/activate
+     
+     pip install -r requirements.txt
+     ```
+   * Tạo tệp cấu hình `.env` ở thư mục gốc của dự án (sử dụng cấu hình từ tệp mẫu `.env.example`):
+     ```env
+     DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/attendance_verification
+     SIMILARITY_THRESHOLD=0.7
+     UPLOADS_DIR=backend/data/face_images
+     ```
+   * Khởi chạy FastAPI Backend:
+     ```bash
+     python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+     ```
+
+3. **Cài đặt & Chạy Frontend**:
+   * Di chuyển vào thư mục `frontend` và cài đặt các gói NPM:
+     ```bash
+     cd frontend
+     npm install
+     ```
+   * Khởi chạy Vite Dev Server:
+     ```bash
+     npm run dev
+     ```
+   * Truy cập: `http://localhost:5173`. Các request API sẽ được tự động proxy sang backend ở port `8000`.
 
 ---
 

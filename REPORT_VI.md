@@ -128,9 +128,9 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
 ### 5.2 Khử độ trễ lạnh (Cold Start Latency) của ONNX Runtime
 * **Vấn đề**: ONNX Runtime chỉ thực sự biên dịch và tối ưu hóa đồ thị tính toán ở lần đầu tiên chạy suy luận (first forward pass). Do đó, sinh viên đầu tiên mở camera điểm danh thường phải đợi từ 3-5 giây để Server phản hồi.
 * **Giải pháp**:
-  - Cập nhật hàm `warm_up` trong dịch vụ [embedding.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/embedding.py) chạy thử suy luận với một ma trận numpy trống kích thước $100 \times 100 \times 3$.
+  - Cập nhật hàm `warm_up` trong dịch vụ [embedding.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/embedding.py) chạy thử suy luận với ảnh trống kích thước tiêu chuẩn $640 \times 640 \times 3$.
   - Gọi hàm chạy thử này trực tiếp trong sự kiện `lifespan` lúc khởi động ứng dụng FastAPI (trong [main.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/main.py)).
-* **Hiệu quả**: Loại bỏ hoàn toàn độ trễ lần đầu tiên. Khi sinh viên đầu tiên điểm danh, Server phản hồi ngay lập tức với tốc độ suy luận tối đa.
+* **Hiệu quả**: Loại bỏ hoàn toàn độ trễ khởi động lạnh của ONNX Runtime. Khi sinh viên đầu tiên điểm danh, Server phản hồi ngay lập tức với tốc độ suy luận tối đa.
 
 ### 5.3 Tối ưu hóa tải tài nguyên Frontend (Preload & Cache)
 * **Vấn đề**: Việc chờ tải mô hình FaceMesh khi người dùng nhấn "Bắt đầu" có thể gây ra độ trễ 3-5 giây (lag), ảnh hưởng đến trải nghiệm người dùng. Đồng thời, việc FastAPI phải phục vụ các tài nguyên tĩnh như âm thanh sẽ gây lãng phí tài nguyên CPU backend.
@@ -156,4 +156,46 @@ Tất cả các tham số ngưỡng được tập trung cấu hình tại tệp
   - **Dịch chuyển toạ độ mũi tên**: Thay đổi dịch chuyển hệ số toạ độ `x` của nét vẽ vector trong SVG của hai mũi tên ra ngoài rìa xa hơn 6 đơn vị (ví dụ, dịch đuôi mũi tên trái từ `28` về `22`, và đuôi mũi tên phải từ `72` lên `78`) để tạo khoảng cách an toàn với khuôn mặt giả lập.
   - **Khắc phục lỗi cắt nét vẽ (Clipping)**: Thêm thuộc tính CSS `overflow: visible !important;` trên lớp `.anim-svg` để trình duyệt cho phép hiển thị các phần tử con trượt ra ngoài vùng chứa vector. Đồng thời điều chỉnh padding của thẻ chứa `.hud-card` thêm khoảng đệm bên phải (`padding: 0 16px 0 20px` thay vì `0 0 0 20px`) để không bị cắt bởi thuộc tính `overflow: hidden` của thẻ HUD card.
 * **Hiệu quả**: Hoạt ảnh chỉ dẫn liveness chuyển động mượt mà, định vị chính xác, không bị đè nét vẽ hay mất chi tiết ở rìa biên trên cả thiết bị di động và máy tính.
+
+### 5.6 Giải quyết Cold Start hình học ảnh (ONNX Dynamic Shape Recompilation)
+* **Vấn đề**: Mặc dù dịch vụ nhận diện được warm-up lúc khởi động bằng ảnh trống `320x320`, nhưng các khung hình chụp thực tế từ camera của sinh viên tải lên có kích thước rất đa dạng (ví dụ: `640x480`, `1280x720`). Khi nhận một kích thước ảnh mới, ONNX Runtime bắt buộc phải cấp phát lại các khối bộ nhớ đệm và biên dịch lại sơ đồ thực thi đồ thị tính toán phù hợp với hình học mới này. Việc này tạo ra một khoảng trễ (cold start) khoảng 1 giây ở lần đầu tiên điểm danh thực tế.
+* **Giải pháp**:
+  - Triển khai hàm bổ trợ `resize_and_pad` (sử dụng phương pháp Letterboxing) chuẩn hóa mọi ảnh đầu vào về kích thước cố định là hình vuông `640x640` có bù viền đen để bảo toàn tỷ lệ khuôn mặt thực tế trước khi chạy dò tìm khuôn mặt.
+  - Cập nhật hàm `warm_up` trong [embedding.py](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/backend/app/services/embedding.py) sử dụng ảnh dummy đúng kích thước `640x640` này.
+* **Hiệu quả**: Đồ thị tính toán của mô hình phát hiện khuôn mặt luôn chạy trên hình dạng đầu vào tĩnh cố định. Loại bỏ hoàn toàn chi phí biên dịch động tại thời điểm runtime, giúp lần điểm danh/đăng ký đầu tiên nhanh tương đương các lần tiếp theo.
+
+### 5.7 Đóng gói Container & Quản lý Mô hình Tự động (Containerization & Model Volume Management)
+* **Vấn đề**: Việc chạy hệ thống bằng cách mở thủ công nhiều cửa sổ terminal (Frontend, Backend, Database) gây bất tiện trong phát triển và triển khai. Thêm vào đó, việc chứa các thư viện ML nặng và các file mô hình học sâu `.onnx` (~500MB+) trực tiếp trong Git làm tăng dung lượng kho mã nguồn và không thể deploy lên các dịch vụ serverless như Vercel (bị giới hạn zip 50MB).
+* **Giải pháp**:
+  - **Đóng gói đa container**: Viết Dockerfile riêng cho Frontend (Node.js Alpine) và Backend (Python Slim), liên kết các container này thông qua tệp `docker-compose.yml` chạy trên cùng một mạng ảo.
+  - **Tách mô hình ra khỏi Git**: Thêm thư mục `models/` và `backend/models/` vào [.gitignore](file:///D:/Python/project/ATTENDANCE-VERIFICATION/ATTENDANCE-VERIFICATION-SYSTEM/.gitignore) để bỏ qua hoàn toàn các file `.onnx` nặng.
+  - **Tự động tải và lưu trữ Volume bền vững**: Cấu hình Backend tự động kiểm tra và tải các file mô hình từ internet về thư mục lưu trữ được chỉ định bởi biến môi trường `INSIGHTFACE_ROOT`. Sử dụng Docker Volume `backend_models` gắn kết thư mục này ra máy thật để bảo toàn và tái sử dụng mô hình, tránh việc tải lại khi restart container.
+* **Hiệu quả**: Mã nguồn Git siêu gọn nhẹ (<10MB). Khởi chạy toàn bộ hệ thống phát triển đồng bộ chỉ với lệnh `docker compose up --build`. Hệ thống có tính đóng gói cao, sẵn sàng triển khai mượt mà lên bất kỳ máy chủ Cloud (VPS) nào mà không cần cấu hình lại.
+
+---
+
+## 6. Hướng Dẫn Vận Hành Hệ Thống Bằng Docker Compose (Dành Cho Nhà Phát Triển)
+
+Hệ thống được thiết lập sẵn môi trường Docker Compose hỗ trợ phát triển nhanh (nạp nóng mã nguồn máy thật vào container và tự động reload):
+
+### 6.1 Lệnh Khởi Chạy
+Để khởi chạy đồng thời Database PostgreSQL (pgvector), FastAPI Backend và React Frontend, chạy lệnh sau tại thư mục gốc:
+```bash
+docker compose up --build
+```
+*(Trong lần đầu chạy, Backend sẽ tự động tải bộ mô hình buffalo_s về máy thật qua volume `backend_models`, hãy đảm bảo máy tính của bạn có mạng ổn định).*
+
+### 6.2 Các Lệnh Quản Trị Thường Dùng
+* **Khởi chạy ngầm (chạy nền)**:
+  ```bash
+  docker compose up -d
+  ```
+* **Xem nhật ký log tập trung**:
+  ```bash
+  docker compose logs -f
+  ```
+* **Dừng toàn bộ hệ thống**:
+  ```bash
+  docker compose down
+  ```
 

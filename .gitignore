@@ -37,3 +37,12 @@ frontend/.vite/
 Thumbs.db
 .idea/
 .vscode/
+
+# ML models
+models/
+backend/models/
+
+# Agent tools
+.agents/
+skills-lock.json
+
